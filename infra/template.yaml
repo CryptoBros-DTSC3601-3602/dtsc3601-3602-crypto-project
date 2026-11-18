@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless prediction infrastructure for BTCUSDT direction forecasting
+
+Parameters:
+  DataBucketName:
+    Type: String
+    Default: dtsc3601-cryptobros-project-879022683465-us-east-2-an
+  SagemakerEndpointName:
+    Type: String
+    Default: ''
+  ProjectName:
+    Type: String
+    Default: dtsc3601-crypto
+
+Resources:
+  PredictionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-predictions'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: prediction_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: prediction_id
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  PredictionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-prediction'
+      CodeUri: ../src/prediction/
+      Handler: app.handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          DATA_BUCKET: !Ref DataBucketName
+          PREDICTIONS_TABLE: !Ref PredictionsTable
+          SAGEMAKER_ENDPOINT: !Ref SagemakerEndpointName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PredictionsTable
+        - S3CrudPolicy:
+            BucketName: !Ref DataBucketName
+        - Statement:
+            - Sid: InvokeSagemakerEndpoint
+              Effect: Allow
+              Action:
+                - sagemaker:InvokeEndpoint
+              Resource: '*'
+
+  HourlyPredictionSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${ProjectName}-hourly-prediction'
+      Description: Requests a BTCUSDT prediction once per hour
+      ScheduleExpression: cron(0 * * * ? *)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt PredictionFunction.Arn
+          Id: PredictionTarget
+
+  PredictionSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref PredictionFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt HourlyPredictionSchedule.Arn
+
+  EvaluationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-evaluation'
+      CodeUri: ../src/evaluation/
+      Handler: app.handler
+      Runtime: python3.12
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          PREDICTIONS_TABLE: !Ref PredictionsTable
+          FLAT_THRESHOLD: '0.002'
+          HORIZON_MINUTES: '60'
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PredictionsTable
+
+  HourlyEvaluationSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${ProjectName}-hourly-evaluation'
+      Description: Evaluates completed BTCUSDT predictions
+      ScheduleExpression: cron(15 * * * ? *)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt EvaluationFunction.Arn
+          Id: EvaluationTarget
+
+  EvaluationSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref EvaluationFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt HourlyEvaluationSchedule.Arn
+
+Outputs:
+  PredictionFunctionName:
+    Description: Name of the hourly prediction Lambda
+    Value: !Ref PredictionFunction
+  PredictionsTableName:
+    Description: DynamoDB table containing prediction records
+    Value: !Ref PredictionsTable
