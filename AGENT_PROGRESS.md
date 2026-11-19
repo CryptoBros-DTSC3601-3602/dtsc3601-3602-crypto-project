@@ -87,6 +87,16 @@ emulator predicted FLAT on the last 120 sample candles. The prediction record
 uses the scored bar timestamp and close. No AWS resources were provisioned.
 If deployed, inference adds Lambda requests, duration, logs, and ECR storage.
 
+## Public dashboard checkpoint
+
+The read-only dashboard shows the latest completed forecast, the last 100 scored
+predictions, and recent training history. The optional SAM deployment serves
+static assets and a JSON endpoint from one origin. An hourly publisher builds
+a sanitized snapshot from the project tables and the public Lambda reads that
+single item. The local preview uses labeled sample data. Twelve tests, SAM lint,
+SAM build, and Chromium desktop and mobile checks passed. Deployment and live
+AWS validation remain pending. See the README for PowerShell deployment steps.
+
 ## Validation on full-serverless
 
 - Seven tests passed. Moto exercised DynamoDB reservations, cutoff boundaries,

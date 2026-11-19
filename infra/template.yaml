@@ -25,7 +25,14 @@ Parameters:
     Description: Immutable ECR inference image URI with digest. Enables private Lambda inference.
     AllowedPattern: '^$|^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$'
 
+  DashboardEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Enable the public read-only website and hourly snapshot.
+
 Conditions:
+  PublicDashboard: !Equals [!Ref DashboardEnabled, 'true']
   InferenceConfigured: !Not [!Equals [!Ref InferenceImage, '']]
   TrainingConfigured: !Not [!Equals [!Ref TrainingImage, '']]
 
@@ -235,7 +242,95 @@ Resources:
               Action: [events:PutRule, events:DescribeRule, events:PutTargets]
               Resource: !Sub 'arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/StepFunctionsGetEventsForSageMakerTrainingJobsRule'
 
+  DashboardTable:
+    Type: AWS::DynamoDB::Table
+    Condition: PublicDashboard
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - {AttributeName: id, AttributeType: S}
+      KeySchema:
+        - {AttributeName: id, KeyType: HASH}
+
+  DashboardApi:
+    Type: AWS::Serverless::HttpApi
+    Condition: PublicDashboard
+    Properties:
+      DefaultRouteSettings:
+        ThrottlingRateLimit: 5
+        ThrottlingBurstLimit: 10
+
+  DashboardWebsite:
+    Type: AWS::Serverless::Function
+    Condition: PublicDashboard
+    Properties:
+      CodeUri: ../src/dashboard/
+      Handler: app.handler
+      Runtime: python3.12
+      Timeout: 8
+      Environment:
+        Variables:
+          DASHBOARD_TABLE: !Ref DashboardTable
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: dynamodb:GetItem
+              Resource: !GetAtt DashboardTable.Arn
+      Events:
+        Home:
+          Type: HttpApi
+          Properties: {ApiId: !Ref DashboardApi, Path: /, Method: GET}
+        Styles:
+          Type: HttpApi
+          Properties: {ApiId: !Ref DashboardApi, Path: /dashboard.css, Method: GET}
+        Script:
+          Type: HttpApi
+          Properties: {ApiId: !Ref DashboardApi, Path: /dashboard.js, Method: GET}
+        Data:
+          Type: HttpApi
+          Properties: {ApiId: !Ref DashboardApi, Path: /api/dashboard, Method: GET}
+
+  DashboardSnapshot:
+    Type: AWS::Serverless::Function
+    Condition: PublicDashboard
+    Properties:
+      CodeUri: ../src/dashboard/
+      Handler: snapshot.handler
+      Runtime: python3.12
+      Timeout: 120
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          DASHBOARD_TABLE: !Ref DashboardTable
+          PREDICTIONS_TABLE: !Ref PredictionsTable
+          RETRAINING_TABLE: !If [TrainingConfigured, !Ref RetrainingTable, '']
+          INFERENCE_IMAGE: !Ref InferenceImage
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: dynamodb:PutItem
+              Resource: !GetAtt DashboardTable.Arn
+            - Effect: Allow
+              Action: dynamodb:Scan
+              Resource:
+                - !GetAtt PredictionsTable.Arn
+                - !If [TrainingConfigured, !GetAtt RetrainingTable.Arn, !Ref 'AWS::NoValue']
+      Events:
+        Publish:
+          Type: Schedule
+          Properties:
+            Schedule: cron(25 * * * ? *)
+            RetryPolicy:
+              MaximumRetryAttempts: 1
+              MaximumEventAgeInSeconds: 900
+
 Outputs:
+  DashboardUrl:
+    Condition: PublicDashboard
+    Value: !Sub 'https://${DashboardApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/'
+  DashboardSnapshotFunctionName:
+    Condition: PublicDashboard
+    Value: !Ref DashboardSnapshot
   PredictionFunctionName:
     Description: Name of the hourly prediction Lambda
     Value: !Ref PredictionFunction

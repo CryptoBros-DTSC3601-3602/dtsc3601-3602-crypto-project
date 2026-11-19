@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#100d1f">
+  <title>CryptoBros · BTCUSDT Forecasts</title>
+  <link rel="stylesheet" href="/dashboard.css">
+  <script defer src="/dashboard.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <a class="brand" href="/" aria-label="CryptoBros home"><span class="mark" aria-hidden="true">◈</span> Crypto<span>Bros</span></a>
+      <nav aria-label="Dashboard sections"><a href="#forecast">Forecast</a><a href="#accuracy">Accuracy</a><a href="#training">Training</a></nav>
+    </div>
+  </header>
+  <main class="wrap">
+    <div class="page-head">
+      <div><div class="pair"><span aria-hidden="true">₿</span> BTC / USDT</div><h1>Bitcoin forecasts</h1><p>One-hour direction predictions, evaluated against Binance.US market data.</p></div>
+      <div id="freshness" class="freshness" role="status">Loading dashboard…</div>
+    </div>
+    <div class="overview">
+      <section id="forecast" class="card forecast" aria-labelledby="forecast-title">
+        <div class="section-head"><h2 id="forecast-title">Latest forecast</h2><span class="tag">60 MIN</span></div>
+        <div class="prediction" id="direction">—</div>
+        <p class="muted" id="forecast-time">Waiting for the latest forecast</p>
+        <dl class="probabilities">
+          <div><dt><i class="up"></i>Up</dt><dd id="up">—</dd></div>
+          <div><dt><i class="flat"></i>Flat</dt><dd id="flat">—</dd></div>
+          <div><dt><i class="down"></i>Down</dt><dd id="down">—</dd></div>
+        </dl>
+        <div class="distribution" aria-hidden="true"><span id="bar-up"></span><span id="bar-flat"></span><span id="bar-down"></span></div>
+        <div class="forecast-footer"><div><span>Scored bar close</span><strong id="close">—</strong></div><div><span>Forecast model</span><strong id="forecast-model">—</strong></div></div>
+      </section>
+      <section id="accuracy" class="card accuracy" aria-labelledby="accuracy-title">
+        <div class="section-head"><h2 id="accuracy-title">Recent accuracy</h2><span class="tag light">LAST 100</span></div>
+        <div class="accuracy-number" id="accuracy-number">—</div>
+        <p class="muted" id="accuracy-detail">Waiting for scored predictions</p>
+        <div class="plot" id="plot" hidden>
+          <span class="axis-label">Cumulative accuracy in this window</span>
+          <canvas id="accuracy-chart" role="img" aria-label="Cumulative accuracy across the selected prediction window"></canvas>
+          <div class="chart-key"><span>Oldest scored</span><span>Newest scored</span></div>
+        </div>
+      </section>
+    </div>
+    <section id="training" class="card history" aria-labelledby="history-title">
+      <div class="section-head history-head"><div><h2 id="history-title">Model training history</h2><p class="muted">The ten most recent retraining runs and their holdout results.</p></div><div class="active-model"><span>Configured model</span><strong id="model">—</strong></div></div>
+      <div id="history-empty" class="empty">Loading training history…</div>
+      <div class="table-wrap" id="table-wrap" hidden><table><thead><tr><th scope="col">Training run</th><th scope="col">Started</th><th scope="col">Status</th><th scope="col">Holdout accuracy</th><th scope="col">Test rows</th></tr></thead><tbody id="runs"></tbody></table></div>
+    </section>
+  </main>
+  <footer class="wrap"><span>CryptoBros</span><span>BTCUSDT · Scheduled hourly</span></footer>
+</body>
+</html>

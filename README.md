@@ -247,6 +247,73 @@ produces a versioned S3 candidate.
    with that digest as `InferenceImage`. The same prediction path will record
    the restored digest.
 
+### Preview and deploy the public dashboard
+
+Run `python bin/preview_dashboard.py` from the repository root and open
+`http://localhost:8000` on the same machine. This preview uses labeled sample
+data and requires only Python 3.
+
+For live data, use AWS CLI credentials for the existing project account,
+Docker for image builds, and AWS SAM CLI. Push the inference image and, for live
+training history, the training image to private ECR in `us-east-2` using the
+Dockerfiles above. Use ECR image digests in the form
+`ACCOUNT.dkr.ecr.us-east-2.amazonaws.com/REPOSITORY@sha256:DIGEST`.
+The forecast needs an inference image to generate new completed predictions.
+You can enable the dashboard before training is configured.
+
+For example, publish the baseline inference image with PowerShell from the
+repository root. Reuse the private repository if it already exists. Create it
+with `aws ecr create-repository --repository-name crypto-inference --profile dtsc3601-crypto --region us-east-2`
+if ECR reports that it is missing.
+
+```powershell
+$Registry = '879022683465.dkr.ecr.us-east-2.amazonaws.com'
+$Tag = git rev-parse --short HEAD
+aws ecr get-login-password --profile dtsc3601-crypto --region us-east-2 | docker login --username AWS --password-stdin $Registry
+docker build --platform linux/amd64 -f sagemaker/Dockerfile.lambda -t "${Registry}/crypto-inference:${Tag}" sagemaker
+docker push "${Registry}/crypto-inference:${Tag}"
+$Digest = aws ecr describe-images --repository-name crypto-inference --image-ids "imageTag=$Tag" --profile dtsc3601-crypto --region us-east-2 --query 'imageDetails[0].imageDigest' --output text
+$InferenceImage = "${Registry}/crypto-inference@${Digest}"
+```
+
+If a model is already serving, use its current digest when adding the dashboard
+to the stack. To publish a training image, use the same ECR steps with a
+separate repository and build with `-f training/Dockerfile` and context `.`.
+
+The following example uses PowerShell from the repository root. Set the image
+variables to your private ECR digest URIs. Leave the training image empty for
+a first deployment, or keep the currently deployed training digest if one is
+already in use. Use the existing `DataBucketName` and `ProjectName` values if
+the stack uses custom values.
+
+```powershell
+$InferenceImage = '<inference image URI with digest>'
+$TrainingImage = '' # Use the existing training digest if configured
+sam build --template-file infra/template.yaml
+sam deploy --guided --stack-name dtsc3601-crypto-serverless --profile dtsc3601-crypto --region us-east-2 --capabilities CAPABILITY_IAM --confirm-changeset --parameter-overrides DashboardEnabled=true "InferenceImage=$InferenceImage" "TrainingImage=$TrainingImage" "SagemakerEndpointName="
+```
+
+Review the change set before accepting it. The stack output `DashboardUrl` is
+the public website address. API Gateway serves the HTML, styles, and data from
+the same origin, so the browser needs no separate API URL or credentials.
+
+The dashboard publishes its first snapshot at 25 minutes past the hour. To
+publish it immediately, invoke the snapshot function named in the stack output.
+
+```powershell
+$Stack = aws cloudformation describe-stacks --stack-name dtsc3601-crypto-serverless --profile dtsc3601-crypto --region us-east-2 --output json | ConvertFrom-Json
+$Snapshot = ($Stack.Stacks[0].Outputs | Where-Object OutputKey -eq 'DashboardSnapshotFunctionName').OutputValue
+aws lambda invoke --function-name $Snapshot --profile dtsc3601-crypto --region us-east-2 dashboard-snapshot-result.json
+($Stack.Stacks[0].Outputs | Where-Object OutputKey -eq 'DashboardUrl').OutputValue
+```
+
+An empty forecast or accuracy window stays empty until the prediction and
+evaluation Lambdas record the results. The new public Lambda reads one
+sanitized snapshot per request. The scheduled publisher reads prediction and
+training history once an hour. API Gateway throttles public requests. Deployment
+can incur API Gateway, Lambda, DynamoDB, and log charges. To take the dashboard
+offline, redeploy with `DashboardEnabled=false`.
+
 ## Questions
 
 Contact **Aashutosh Panchal**:
