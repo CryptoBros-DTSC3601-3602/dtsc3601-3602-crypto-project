@@ -34,6 +34,7 @@ def test_private_prediction_saved_for_evaluation(monkeypatch):
     client.invoke.return_value = {"Payload": io.BytesIO(json.dumps(inferred).encode())}
     monkeypatch.setattr(app.boto3, "client", lambda *args, **kwargs: client)
     monkeypatch.setattr(app, "INFERENCE_FUNCTION", "private-inference")
+    monkeypatch.setattr(app, "INFERENCE_IMAGE", "candidate@sha256:123")
     monkeypatch.setattr(app, "fetch_candles", lambda: candles)
     monkeypatch.setattr(app, "store_raw_data", lambda now, rows: "sample")
     table = Mock()
@@ -44,6 +45,7 @@ def test_private_prediction_saved_for_evaluation(monkeypatch):
     assert (item["status"], item["prediction"], item["close"]) == ("completed", "FLAT", 100)
     assert item["bar_time_utc"] == inferred["bar_time_utc"]
     assert item["inference_function"] == "private-inference"
+    assert item["inference_image"] == "candidate@sha256:123"
 
 
 def test_function_error_cannot_be_recorded_as_prediction(monkeypatch):

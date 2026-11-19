@@ -69,12 +69,11 @@ public API or inference endpoint.
    docker build -f training/Dockerfile, push it to private ECR, review a SAM
    change set with its digest, and validate one bounded workflow execution.
    Verify Binance reachability, IAM, failed-job history and candidate artifacts.
-4. Decide how operators will approve a model version for serving. Item 12 of the
-   project brief requires keeping the previous model available until promotion
-   succeeds. Automatic promotion and rollback are pending a scope decision.
-   For private inference, publish the locally tested inference image and supply its
-   digest as InferenceImage. Verify completed predictions and later evaluations in
-   DynamoDB. Frontend/API access remains a future milestone.
+4. Supply the private inference image digest as InferenceImage and verify
+   completed predictions and evaluations in DynamoDB. Use the documented
+   candidate release procedure to switch to an approved retrained model.
+   Keep the previous digest available for rollback. Plan frontend access
+   after confirming its audience, forecast display, and refresh behavior.
 5. Review retention policies before enabling schedules. Existing hourly prediction
    and evaluation rules are enabled in the template. No AWS resources were
    created, started, modified or deleted in this local milestone.

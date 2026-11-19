@@ -72,6 +72,7 @@ Resources:
         Variables:
           DATA_BUCKET: !Ref DataBucketName
           PREDICTIONS_TABLE: !Ref PredictionsTable
+          INFERENCE_IMAGE: !Ref InferenceImage
           INFERENCE_FUNCTION: !If [InferenceConfigured, !Ref InferenceFunction, '']
           SAGEMAKER_ENDPOINT: !Ref SagemakerEndpointName
       Policies:

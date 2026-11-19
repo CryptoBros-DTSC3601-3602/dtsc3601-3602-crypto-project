@@ -224,8 +224,28 @@ in the SAM change set. Review existing hourly schedules and permissions before
 applying it. The retraining schedule defaults to disabled. When enabled,
 the workflow checks the last 100 evaluated predictions, reserves an eligible
 window in DynamoDB, and submits one time-limited training job. A passing job
-produces a versioned S3 candidate. The deployed inference image selects the
-serving model until a separate release is approved.
+produces a versioned S3 candidate.
+
+### Release an approved retrained model
+
+1. Select a DynamoDB history record with status `validated` and review its
+   chronological accuracy and test size. Download the recorded S3 artifact from
+   that trusted training run as `model.tar.gz`. The inference runtime loads a
+   serialized Python model, so use artifacts produced by the project workflow.
+2. Prepare and build the candidate image.
+
+   ```sh
+   python bin/prepare_candidate_image.py model.tar.gz /tmp/crypto-candidate
+   docker build --platform linux/amd64 -f /tmp/crypto-candidate/Dockerfile.lambda -t crypto-candidate /tmp/crypto-candidate
+   ```
+
+3. Smoke-test the candidate image with the local inference request above. Publish
+   the approved image to private ECR and set `InferenceImage` to its digest
+   in the SAM change set. After applying it, verify that the next completed
+   prediction records the new digest as `inference_image`.
+4. Retain the previous image digest in ECR. To restore it, apply a change set
+   with that digest as `InferenceImage`. The same prediction path will record
+   the restored digest.
 
 ## Questions
 

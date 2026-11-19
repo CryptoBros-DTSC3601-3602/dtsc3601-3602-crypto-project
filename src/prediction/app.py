@@ -14,6 +14,7 @@ BUCKET_NAME = os.environ["DATA_BUCKET"]
 TABLE_NAME = os.environ["PREDICTIONS_TABLE"]
 SAGEMAKER_ENDPOINT = os.environ.get("SAGEMAKER_ENDPOINT", "")
 
+INFERENCE_IMAGE = os.environ.get("INFERENCE_IMAGE", "")
 INFERENCE_FUNCTION = os.environ.get("INFERENCE_FUNCTION", "")
 
 BINANCE_URL = "https://api.binance.us/api/v3/klines"
@@ -154,6 +155,7 @@ def handler(event, context):
             "raw_s3_key": raw_key,
             "endpoint_name": (SAGEMAKER_ENDPOINT or None) if not INFERENCE_FUNCTION else None,
             "inference_function": INFERENCE_FUNCTION or None,
+            "inference_image": (INFERENCE_IMAGE or None) if INFERENCE_FUNCTION else None,
         }
 
         predictions.put_item(Item={key: value for key, value in item.items() if value is not None})
