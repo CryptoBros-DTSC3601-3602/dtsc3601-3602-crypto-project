@@ -6,7 +6,7 @@ Complete the serverless BTCUSDT retraining pipeline and API/frontend access with
 
 ## Last updated
 
-2026-11-17
+2026-11-19
 
 ## Completed
 
@@ -25,12 +25,12 @@ Complete the serverless BTCUSDT retraining pipeline and API/frontend access with
 ## Current AWS state
 
 - SageMaker endpoint: `dtsc3601-btcusdt-serverless`
-- Endpoint status: deleted; recreating it will start continuous billing.
+- Endpoint status at last owner check: absent. Current status needs authenticated verification.
 - Stack: `dtsc3601-crypto-serverless`
 - Branch: `full-serverless`
 - Region: `us-east-2`
 
-An `InService` endpoint is continuously billable. It remains deleted and must not be recreated unless live prediction usage or an approved smoke test is actively required.
+An `InService` endpoint is continuously billable. Keep it absent during this milestone.
 
 ## Cost protection status
 
@@ -41,20 +41,71 @@ An `InService` endpoint is continuously billable. It remains deleted and must no
 - [ ] No temporary SageMaker endpoint left running
 - [ ] Lambda log retention configured
 
-## Next milestone
+## Local retraining milestone
 
-Retraining pipeline.
+The optional SAM workflow scans all prediction pages for the newest 100 evaluated
+predictions. A DynamoDB transaction reserves the window, records the execution,
+and starts a seven-day cooldown at admission, including failed attempts.
+A deterministic job name prevents a second paid job for the same execution.
+The training image downloads fresh completed Binance.US candles, writes the
+snapshot and metrics under a run-specific S3 prefix, and builds a candidate.
+The last 20% is held out chronologically with a four-bar purge before the split.
+Candidate accuracy must be at least 55%. A validated history record includes
+the metrics and artifact URI. Active-model selection is untouched.
+
+The state machine is omitted until TrainingImage contains an ECR digest.
+Its daily schedule is disabled even when an image is supplied. Each admitted
+job requests one ml.m5.large with a 30-minute runtime limit. There is no new
+public API or inference endpoint.
 
 ## Immediate next step
 
-1. Keep the SageMaker endpoint deleted during development.
-2. Confirm the deployed stack parameter is empty.
-3. Confirm prediction records remain useful as `pending_sagemaker`.
-4. Implement retraining threshold logic locally.
-5. Add unit tests.
-6. Add SAM infrastructure.
-7. Run validation without deploying SageMaker resources.
-8. Add deployment instructions only after local tests pass.
+1. Repeat the local checks below after changes.
+2. Before AWS validation, bind a project identity, recheck endpoint and training
+   job inventory, and review existing schedules and their charges. The owner's
+   last CLI check found the endpoint absent and the stack endpoint parameter empty.
+   The cloud session could not independently refresh this check (profile missing).
+3. When authorized, build the image from the repository root using
+   docker build -f training/Dockerfile, push it to private ECR, review a SAM
+   change set with its digest, and validate one bounded workflow execution.
+   Verify Binance reachability, IAM, failed-job history and candidate artifacts.
+4. Implement approved candidate promotion/rollback and endpoint-free inference
+   behind Lambda for future API Gateway access. Pending predictions cannot
+   supply correctness labels until an inference path produces completed outputs.
+5. Review retention policies before enabling schedules. Existing hourly prediction
+   and evaluation rules are enabled in the template. No AWS resources were
+   created, started, modified or deleted in this local milestone.
+
+## Validation on full-serverless
+
+- Seven tests passed. Moto exercised DynamoDB reservations, cutoff boundaries,
+  stale windows, failed and replayed executions, and S3-backed candidate history.
+  The first dependency fetch returned HTTP 503. After installation the history
+  test caught a reserved DynamoDB attribute name; the updated expression passed.
+- Installed development dependencies from tests/requirements.txt can be tested with
+  `env -u AWS_PROFILE -u AWS_DEFAULT_PROFILE AWS_DEFAULT_REGION=us-east-2 AWS_EC2_METADATA_DISABLED=true OMP_NUM_THREADS=2 .venv/bin/python -m pytest -q tests`.
+- `sam validate --lint -t infra/template.yaml --region us-east-2` passed.
+  The external ASL also parsed locally. AWS service integration remains untested.
+- Built the Python 3.10 training image locally using the cloud CA bundle for pip.
+  Ran its validator with Docker networking disabled on the checked-in sample:
+  136 training rows, four purged rows, 35 holdout rows, 42.86% accuracy.
+  This falls below the candidate gate. No sample model was promoted.
+- No AWS-side cleanup was necessary for this work. No live resource inventory
+  was available. Local Docker smoke tests used automatic container removal.
+
+## Cost inventory
+
+- S3 candle, model and report storage, requests and applicable data transfer.
+- DynamoDB prediction and retraining table storage, reads and writes, and
+  point-in-time recovery on the prediction table.
+- Private ECR image storage and applicable scanning/transfer fees.
+- CloudWatch log ingestion and retention for Lambda and training jobs.
+- Recurring scheduled executions drive Lambda duration/requests, Step Functions
+  Standard transitions and dependent service requests. The new schedule is disabled.
+- Each admitted SageMaker training job incurs instance and attached volume
+  charges for its runtime. Its completed job record persists as metadata.
+- The template provisions no inference endpoint. Existing AWS resources and
+  current account charges cannot be inventoried from this session.
 
 ## Important decisions
 
@@ -66,12 +117,6 @@ Retraining pipeline.
 - Retraining cooldown: seven days.
 - Live endpoint: disabled/deleted during development.
 - Training: SageMaker Training Job rather than a continuously running SageMaker Pipeline.
-
-## Work in progress
-
-- Retraining decision logic.
-- Retraining state storage.
-- SageMaker training entrypoint.
 
 ## Known risks
 

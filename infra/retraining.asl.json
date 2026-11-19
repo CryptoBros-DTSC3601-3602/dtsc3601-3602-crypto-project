@@ -1,0 +1,41 @@
+{
+  "StartAt": "CheckWindow",
+  "TimeoutSeconds": 7200,
+  "States": {
+    "CheckWindow": {
+      "Type": "Task", "Resource": "${FunctionArn}",
+      "Parameters": {"execution.$": "$$.Execution.Id"}, "Next": "Eligible"
+    },
+    "Eligible": {
+      "Type": "Choice", "Choices": [{"Variable": "$.train", "BooleanEquals": true, "Next": "TrainCandidate"}],
+      "Default": "Done"
+    },
+    "TrainCandidate": {
+      "Type": "Task", "Resource": "arn:aws:states:::sagemaker:createTrainingJob.sync",
+      "Parameters": {
+        "TrainingJobName.$": "$.run",
+        "RoleArn": "${TrainingRoleArn}",
+        "AlgorithmSpecification": {"TrainingImage": "${TrainingImage}", "TrainingInputMode": "File"},
+        "ResourceConfig": {"InstanceType": "ml.m5.large", "InstanceCount": 1, "VolumeSizeInGB": 5},
+        "StoppingCondition": {"MaxRuntimeInSeconds": 1800},
+        "OutputDataConfig": {"S3OutputPath": "s3://${Bucket}/retraining/artifacts"},
+        "Environment": {"DATA_BUCKET": "${Bucket}", "RUN_ID.$": "$.run"}
+      },
+      "ResultPath": "$.job",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure"}],
+      "Next": "RecordCandidate"
+    },
+    "RecordCandidate": {
+      "Type": "Task", "Resource": "${FunctionArn}",
+      "Parameters": {"execution.$": "$$.Execution.Id", "status": "validated", "artifact.$": "$.job.ModelArtifacts.S3ModelArtifacts"},
+      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "MaxAttempts": 3}],
+      "End": true
+    },
+    "RecordFailure": {
+      "Type": "Task", "Resource": "${FunctionArn}",
+      "Parameters": {"execution.$": "$$.Execution.Id", "status": "failed"},
+      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "MaxAttempts": 3}], "Next": "TrainingFailed"
+    },
+    "TrainingFailed": {"Type": "Fail"}, "Done": {"Type": "Succeed"}
+  }
+}

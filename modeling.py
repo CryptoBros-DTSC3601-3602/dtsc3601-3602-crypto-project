@@ -17,6 +17,7 @@ def train_direction_model(
     feature_frame: pd.DataFrame,
     test_fraction: float = 0.2,
     random_state: int = 42,
+    gap_bars: int = 0,
 ) -> tuple[HistGradientBoostingClassifier, dict]:
     """Train and evaluate a classifier using a chronological holdout.
 
@@ -28,6 +29,7 @@ def train_direction_model(
         feature_frame: Model-ready rows containing feature columns and target.
         test_fraction: Fraction of the most recent rows reserved for testing.
         random_state: Seed used by the classifier for reproducibility.
+        gap_bars: Rows excluded immediately before the holdout to purge overlapping labels.
 
     Returns:
         The fitted classifier and a dictionary of evaluation metrics.
@@ -35,10 +37,10 @@ def train_direction_model(
     if not 0 < test_fraction < 1:
         raise ValueError("test_fraction must be between 0 and 1")
     split = int(len(feature_frame) * (1 - test_fraction))
-    if split <= 0 or split >= len(feature_frame):
+    if gap_bars < 0 or split <= gap_bars or split >= len(feature_frame):
         raise ValueError("Feature frame is too small for the requested split.")
 
-    train = feature_frame.iloc[:split]
+    train = feature_frame.iloc[:split - gap_bars]
     test = feature_frame.iloc[split:]
     model = _make_model(random_state)
     model.fit(train[FEATURE_COLUMNS], train["target"])

@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 
 import boto3
+from botocore.exceptions import ClientError
 
 
 TABLE_NAME = os.environ["PREDICTIONS_TABLE"]
@@ -39,15 +40,23 @@ def fetch_candle_at(timestamp):
     return Decimal(str(candles[0][4]))
 
 
-def handler(event, context):
-    response = table.scan(
-        FilterExpression="#status = :completed AND attribute_not_exists(evaluated_at)",
-        ExpressionAttributeNames={"#status": "status"},
-        ExpressionAttributeValues={":completed": "completed"},
-    )
-    evaluated = 0
+def pending_items():
+    options = {
+        "FilterExpression": "#status = :completed AND attribute_not_exists(evaluated_at)",
+        "ExpressionAttributeNames": {"#status": "status"},
+        "ExpressionAttributeValues": {":completed": "completed"},
+    }
+    while True:
+        page = table.scan(**options)
+        yield from page["Items"]
+        if "LastEvaluatedKey" not in page:
+            return
+        options["ExclusiveStartKey"] = page["LastEvaluatedKey"]
 
-    for item in response.get("Items", []):
+
+def handler(event, context):
+    evaluated = 0
+    for item in pending_items():
         bar_time = datetime.fromisoformat(item["bar_time_utc"].replace("Z", "+00:00"))
         target_time = bar_time + timedelta(minutes=HORIZON_MINUTES)
         if target_time > datetime.now(timezone.utc):
@@ -60,19 +69,25 @@ def handler(event, context):
         predicted_close = Decimal(str(item["close"]))
         actual_direction = direction(actual_close / predicted_close - 1)
         correct = actual_direction == item["prediction"]
-        table.update_item(
-            Key={"prediction_id": item["prediction_id"]},
-            UpdateExpression=(
-                "SET evaluated_at = :evaluated, actual_close = :actual_close, "
-                "actual_direction = :actual_direction, correct = :correct"
-            ),
-            ExpressionAttributeValues={
-                ":evaluated": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                ":actual_close": actual_close,
-                ":actual_direction": actual_direction,
-                ":correct": correct,
-            },
-        )
+        try:
+            table.update_item(
+                Key={"prediction_id": item["prediction_id"]},
+                ConditionExpression="attribute_not_exists(evaluated_at) AND attribute_exists(prediction_id)",
+                UpdateExpression=(
+                    "SET evaluated_at = :evaluated, actual_close = :actual_close, "
+                    "actual_direction = :actual_direction, correct = :correct"
+                ),
+                ExpressionAttributeValues={
+                    ":evaluated": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    ":actual_close": actual_close,
+                    ":actual_direction": actual_direction,
+                    ":correct": correct,
+                },
+            )
+        except ClientError as error:
+            if error.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                continue
+            raise
         evaluated += 1
 
     return {"evaluated": evaluated}
