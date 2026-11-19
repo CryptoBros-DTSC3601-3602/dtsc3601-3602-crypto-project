@@ -1,164 +1,134 @@
-# Agent Progress Journal
+# Agent progress journal
 
-## Goal
+## November 19, 2026 Windows checkpoint
 
-Complete the serverless BTCUSDT retraining pipeline and API/frontend access with no unnecessary persistent AWS cost.
+Reviewed the implementation at `a862718` on `full-serverless`. The verified
+organization repository's branch pointed to the same commit at the start of
+this session. This checkpoint updates the two agent documents.
 
-## Last updated
+- Windows Python 3.12 ran `python -m pytest -q tests` with the declared test
+  dependencies in the ignored `.venv/crypto-test-deps` directory.
+  All 12 focused tests passed.
+- SAM CLI 1.172.1 passed `python -m samcli validate --lint --template-file infra/template.yaml --profile dtsc3601-crypto --region us-east-2`
+  and `python -m samcli build --template-file infra/template.yaml`. Windows
+  Application Control blocked `sam.exe`. The installed SAM Python module worked.
+  `python -m json.tool infra/retraining.asl.json` also passed.
+- The Windows dashboard HTTP check returned 200 for HTML, CSS, JS, and the
+  JSON API, and verified the sample flag and 100 fixture outcomes.
+- Windows Docker Desktop started its Linux engine after an initial missing
+  named pipe. Both `linux/amd64` images built locally. The inference runtime
+  emulator returned `FLAT` for the last 120 sample candles. The training image
+  ran offline and scored 42.86% on 35 holdout rows. The 55% quality gate
+  rejected the candidate and produced no model artifact. Both smoke-test
+  containers were removed. The images remain available as `crypto-inference`
+  and `crypto-training`.
+- The cloud checkpoint also passed Chromium desktop, mobile, and API-error
+  checks and exercised serving with a retrained fixture image.
 
-2026-11-19
+## Read-only AWS inventory
 
-## Completed
+- STS verified account `879022683465` and
+  `arn:aws:iam::879022683465:user/AashutoshPanchal` in `us-east-2`.
+- `dtsc3601-crypto-serverless` was `UPDATE_COMPLETE`. Its parameters are
+  `ProjectName=dtsc3601-crypto`, the shared `DataBucketName` below, and an empty
+  `SagemakerEndpointName`. It deploys prediction and evaluation Lambdas, their
+  EventBridge rules, and the predictions table. Private inference, retraining,
+  and the dashboard are pending deployment.
+- SageMaker returned `ValidationException` with `Could not find endpoint
+  "dtsc3601-btcusdt-serverless"`. The project endpoint list was empty and the
+  regional training lists returned zero `InProgress` or `Stopping` jobs.
+- The live `dtsc3601-crypto-hourly-prediction` and
+  `dtsc3601-crypto-hourly-evaluation` rules were both `DISABLED`. The deployed
+  CloudFormation template declares both `ENABLED`. Verify their live states
+  after the approved deployment and explicitly enable them with approval if
+  they are still disabled. No dashboard or retraining rule is deployed and no
+  project EventBridge Scheduler schedules were found.
+- The predictions table was active and on demand with 35-day point-in-time
+  recovery. AWS reported 2,120 bytes and eight records. A scan found zero
+  completed or scored forecasts.
+- The existing private ECR repository `dtsc3601-btcusdt-inference` has eight
+  digests, mutable tags, and no lifecycle policy. The private inference Lambda
+  is absent, so there is no active serving digest. Build from
+  `sagemaker/Dockerfile.lambda` for the first Lambda release.
+- The shared bucket `dtsc3601-cryptobros-project-879022683465-us-east-2-an`
+  is in Ohio and has no lifecycle configuration. The project log group
+  `/aws/lambda/dtsc3601-crypto-prediction` has 3,506 bytes and no retention limit.
 
-- Added hourly prediction Lambda.
-- Added S3 raw-candle storage.
-- Added DynamoDB prediction storage.
-- Added SageMaker custom inference container.
-- Corrected Linux `serve` line endings.
-- Deployed SageMaker endpoint.
-- Added hourly evaluation Lambda.
-- Added actual direction and correctness fields.
-- Added cost guardrails and a resume journal.
-- Deleted SageMaker endpoint `dtsc3601-btcusdt-serverless` to stop continuous compute billing.
-- Cleared `SagemakerEndpointName` in the deployed prediction stack.
+## Cost and scope
 
-## Current AWS state
+Existing cost drivers include S3 storage and requests, ECR image storage,
+DynamoDB storage and point-in-time recovery, and CloudWatch log storage. AWS
+lists [$0.10 per GB-month for private ECR storage](https://aws.amazon.com/ecr/pricing/).
+The inventory did not establish account charges. This checkpoint made zero
+AWS resource changes.
 
-- SageMaker endpoint: `dtsc3601-btcusdt-serverless`
-- Endpoint status at last owner check: absent. Current status needs authenticated verification.
-- Stack: `dtsc3601-crypto-serverless`
-- Branch: `full-serverless`
-- Region: `us-east-2`
-
-An `InService` endpoint is continuously billable. Keep it absent during this milestone.
-
-## Cost protection status
-
-- [x] Verified endpoint deletion
-- [x] Endpoint deleted after testing
-- [ ] No training jobs left running
-- [ ] No temporary endpoint configurations left
-- [ ] No temporary SageMaker endpoint left running
-- [ ] Lambda log retention configured
-
-## Local retraining milestone
-
-The optional SAM workflow scans all prediction pages for the newest 100 evaluated
-predictions. A DynamoDB transaction reserves the window, records the execution,
-and starts a seven-day cooldown at admission, including failed attempts.
-A deterministic job name prevents a second paid job for the same execution.
-The training image downloads fresh completed Binance.US candles, writes the
-snapshot and metrics under a run-specific S3 prefix, and builds a candidate.
-The last 20% is held out chronologically with a four-bar purge before the split.
-Candidate accuracy must be at least 55%. A validated history record includes
-the metrics and artifact URI. Active-model selection is untouched.
-
-The state machine is omitted until TrainingImage contains an ECR digest.
-Its daily schedule is disabled even when an image is supplied. Each admitted
-job requests one ml.m5.large with a 30-minute runtime limit. There is no new
-public API or inference endpoint.
+With the pipeline and dashboard enabled, a 30-day month has 720 predictions,
+up to 720 private inference invocations, 720 evaluations, and 720 snapshots
+before retries and manual invocations. Publisher and evaluation scans incur
+DynamoDB reads that grow with the table. Public traffic adds API Gateway,
+Lambda, snapshot reads, and logs. The training workflow adds Step Functions
+transitions on execution and, for admitted jobs, training compute, volume,
+logs, and artifact costs. Review storage and log retention before enabling
+recurring activity. Keep the endpoint absent and the retraining rule disabled.
 
 ## Immediate next step
 
-1. Repeat the local checks below after changes.
-2. Before AWS validation, bind a project identity, recheck endpoint and training
-   job inventory, and review existing schedules and their charges. The owner's
-   last CLI check found the endpoint absent and the stack endpoint parameter empty.
-   The cloud session could not independently refresh this check (profile missing).
-3. When authorized, build the image from the repository root using
-   docker build -f training/Dockerfile, push it to private ECR, review a SAM
-   change set with its digest, and validate one bounded workflow execution.
-   Verify Binance reachability, IAM, failed-job history and candidate artifacts.
-4. Supply the private inference image digest as InferenceImage and verify
-   completed predictions and evaluations in DynamoDB. Use the documented
-   candidate release procedure to switch to an approved retrained model.
-   Keep the previous digest available for rollback. Plan frontend access
-   after confirming its audience, forecast display, and refresh behavior.
-5. Review retention policies before enabling schedules. Existing hourly prediction
-   and evaluation rules are enabled in the template. No AWS resources were
-   created, started, modified or deleted in this local milestone.
+1. Use the locally smoke-tested `crypto-inference` image for staging. If it
+   needs rebuilding, use these Windows commands and the sample candle request
+   in the [README](README.md). Keep the optional `crypto-training` image for
+   separate training review.
 
-## Private inference checkpoint
+   ```powershell
+   docker buildx build --platform linux/amd64 --provenance=false --sbom=false --load -f sagemaker/Dockerfile.lambda -t crypto-inference sagemaker
+   docker buildx build --platform linux/amd64 --provenance=false --sbom=false --load -f training/Dockerfile -t crypto-training .
+   ```
 
-The existing prediction Lambda can call a private, on-demand inference Lambda
-packaged with the checked-in model. No public route or SageMaker endpoint is
-required. Nine local tests passed, SAM lint passed, and the Lambda runtime
-emulator predicted FLAT on the last 120 sample candles. The prediction record
-uses the scored bar timestamp and close. No AWS resources were provisioned.
-If deployed, inference adds Lambda requests, duration, logs, and ECR storage.
+2. After staging approval, use the existing ECR repository and shared bucket.
+   Push the tested image under a unique release tag and resolve it to a digest.
+   If a serving image has since been deployed, reuse its verified digest.
+   Omit the new `TrainingImage` parameter for this first dashboard and inference
+   update. On later updates preserve a deployed training digest or set a
+   reviewed digest from a separate private training repository.
 
-## Public dashboard checkpoint
+   ```powershell
+   $ApiArgs = @('--profile','dtsc3601-crypto','--region','us-east-2')
+   $Identity = aws sts get-caller-identity @ApiArgs --output json | ConvertFrom-Json
+   if ($Identity.Account -ne '879022683465' -or $Identity.Arn -notlike '*/AashutoshPanchal') { throw 'Wrong AWS identity' }
+   $StackName = 'dtsc3601-crypto-serverless'
+   $Bucket = 'dtsc3601-cryptobros-project-879022683465-us-east-2-an'
+   $Registry = '879022683465.dkr.ecr.us-east-2.amazonaws.com'
+   $Repository = 'dtsc3601-btcusdt-inference'
+   $Tag = "lambda-$(git rev-parse --short HEAD)-$((Get-Date).ToUniversalTime().ToString('yyyyMMddHHmmss'))"
+   $ImageTag = "${Registry}/${Repository}:${Tag}"
+   aws ecr get-login-password @ApiArgs | docker login --username AWS --password-stdin $Registry
+   if ($LASTEXITCODE -ne 0) { throw 'Unable to log in to ECR' }
+   docker tag crypto-inference $ImageTag
+   if ($LASTEXITCODE -ne 0) { throw 'Unable to tag the inference image' }
+   docker push $ImageTag
+   if ($LASTEXITCODE -ne 0) { throw 'Unable to push the inference image' }
+   $Digest = aws ecr describe-images --repository-name $Repository --image-ids "imageTag=$Tag" @ApiArgs --query 'imageDetails[0].imageDigest' --output text
+   if ($LASTEXITCODE -ne 0 -or $Digest -notmatch '^sha256:[a-f0-9]{64}$') { throw 'Unable to resolve inference digest' }
+   $InferenceImage = "${Registry}/${Repository}@${Digest}"
 
-The read-only dashboard shows the latest completed forecast, the last 100 scored
-predictions, and recent training history. The optional SAM deployment serves
-static assets and a JSON endpoint from one origin. An hourly publisher builds
-a sanitized snapshot from the project tables and the public Lambda reads that
-single item. The local preview uses labeled sample data. Twelve tests, SAM lint,
-SAM build, and Chromium desktop and mobile checks passed. Deployment and live
-AWS validation remain pending. See the README for PowerShell deployment steps.
+   python -m samcli build --template-file infra/template.yaml
+   if ($LASTEXITCODE -ne 0) { throw 'SAM build failed' }
+   python -m samcli deploy --template-file .aws-sam/build/template.yaml --stack-name $StackName --s3-bucket $Bucket --s3-prefix 'deployment/dtsc3601-crypto-serverless' @ApiArgs --capabilities CAPABILITY_IAM --no-execute-changeset --parameter-overrides DashboardEnabled=true "InferenceImage=$InferenceImage"
+   ```
 
-## Validation on full-serverless
-
-- Seven tests passed. Moto exercised DynamoDB reservations, cutoff boundaries,
-  stale windows, failed and replayed executions, and S3-backed candidate history.
-  The first dependency fetch returned HTTP 503. After installation the history
-  test caught a reserved DynamoDB attribute name; the updated expression passed.
-- Installed development dependencies from tests/requirements.txt can be tested with
-  `env -u AWS_PROFILE -u AWS_DEFAULT_PROFILE AWS_DEFAULT_REGION=us-east-2 AWS_EC2_METADATA_DISABLED=true OMP_NUM_THREADS=2 .venv/bin/python -m pytest -q tests`.
-- `sam validate --lint -t infra/template.yaml --region us-east-2` passed.
-  The external ASL also parsed locally. AWS service integration remains untested.
-- Built the Python 3.10 training image locally using the cloud CA bundle for pip.
-  Ran its validator with Docker networking disabled on the checked-in sample:
-  136 training rows, four purged rows, 35 holdout rows, 42.86% accuracy.
-  This falls below the candidate gate. No sample model was promoted.
-- No AWS-side cleanup was necessary for this work. No live resource inventory
-  was available. Local Docker smoke tests used automatic container removal.
-
-## Cost inventory
-
-- S3 candle, model and report storage, requests and applicable data transfer.
-- DynamoDB prediction and retraining table storage, reads and writes, and
-  point-in-time recovery on the prediction table.
-- Private ECR image storage and applicable scanning/transfer fees.
-- CloudWatch log ingestion and retention for Lambda and training jobs.
-- Recurring scheduled executions drive Lambda duration/requests, Step Functions
-  Standard transitions and dependent service requests. The new schedule is disabled.
-- Each admitted SageMaker training job incurs instance and attached volume
-  charges for its runtime. Its completed job record persists as metadata.
-- The template provisions no inference endpoint. Existing AWS resources and
-  current account charges cannot be inventoried from this session.
-
-## Important decisions
-
-- Prediction horizon: 60 minutes.
-- Prediction cadence: hourly.
-- Evaluation cadence: hourly.
-- Minimum rolling evaluation window: 100 predictions.
-- Retraining threshold: below 55% rolling accuracy.
-- Retraining cooldown: seven days.
-- Live endpoint: disabled/deleted during development.
-- Training: SageMaker Training Job rather than a continuously running SageMaker Pipeline.
-
-## Known risks
-
-- SageMaker endpoints incur continuous compute cost while `InService`.
-- The endpoint/container must be deleted outside explicit smoke tests.
-- Lambda/Binance calls may encounter rate or availability failures.
-- Retraining must never overwrite the active model before validation succeeds.
-- Evaluation records must remain idempotent.
-
-## AWS cleanup checklist
-
-Before ending any session:
-
-- Delete test endpoints.
-- Delete test endpoint configurations.
-- Delete temporary SageMaker models.
-- Verify no training jobs remain `InProgress`.
-- Disable temporary schedules.
-- Remove test data from S3 only when explicitly approved.
-- Record the cleanup result in this file.
-
-## Next session instructions
-
-Start by reading this file and `readMEAgent.md`, verify endpoint status, and continue only the highest-priority unfinished task marked here.
+3. Inspect the returned change set with `aws cloudformation describe-change-set`
+   using its ARN and the project profile and region. Review table changes, IAM,
+   public routes, and rule states. Verify the project and bucket parameters
+   and empty endpoint setting are preserved. Apply the reviewed ARN with
+   `aws cloudformation execute-change-set` after explicit approval. Verify
+   `UPDATE_COMPLETE`, check live rule states, and get approval for any direct
+   rule enablement still needed.
+4. Use `DashboardUrl` and `DashboardSnapshotFunctionName` from the stack outputs.
+   Verify public HTML and JSON return 200. Follow a scheduled prediction through
+   DynamoDB and S3. Confirm its serving digest, subsequent score, and the
+   next published snapshot.
+5. Separately stage a training digest while keeping the retraining rule disabled.
+   Verify eligibility and obtain paid-training approval before triggering one
+   bounded execution. Confirm the history, S3 metrics, quality gate, and
+   artifacts. For a passing candidate, use the manual release procedure in the
+   README and verify the new serving digest after approval. Record billable
+   resources and their final status.
