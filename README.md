@@ -193,6 +193,40 @@ Class probabilities:
 The API returns a rolling window rather than one candle because moving
 averages, RSI, volatility, and volume features need historical values.
 
+## Serverless development on `full-serverless`
+
+The hourly prediction Lambda fetches closed candles from Binance.US and stores the
+raw input in S3. Set the SAM parameter `InferenceImage` to the immutable digest
+URI of the private inference image to run the packaged baseline model in Lambda.
+Prediction invokes it synchronously and saves the resulting class, probabilities,
+model bar time, and closing price in DynamoDB. Evaluation uses that price and
+timestamp to score the forecast one hour later. The inference function has no
+HTTP URL and needs no provisioned concurrency. With an empty inference image
+parameter, the existing SageMaker configuration or pending-record behavior applies.
+
+Build from the repository root on Linux using Docker:
+
+```sh
+docker build --platform linux/amd64 -f sagemaker/Dockerfile.lambda -t crypto-inference sagemaker
+docker build --platform linux/amd64 -f training/Dockerfile -t crypto-training .
+```
+
+To exercise the inference image offline, start it with
+`docker run --rm -p 127.0.0.1:9000:8080 crypto-inference` and POST a JSON object
+containing a `candles` array of numeric OHLCV records to
+`/2015-03-31/functions/function/invocations`. Use the columns from
+`data/sample_btcusdt_15m.csv`, including UTC timestamps and taker buy volume.
+The response contains the predicted class, probabilities, close and model bar time.
+
+For eventual AWS validation, store each linux/amd64 image in private ECR in
+`us-east-2` and supply the two digest URIs as `InferenceImage` and `TrainingImage`
+in the SAM change set. Review existing hourly schedules and permissions before
+applying it. The retraining schedule defaults to disabled. When enabled,
+the workflow checks the last 100 evaluated predictions, reserves an eligible
+window in DynamoDB, and submits one time-limited training job. A passing job
+produces a versioned S3 candidate. The deployed inference image selects the
+serving model until a separate release is approved.
+
 ## Questions
 
 Contact **Aashutosh Panchal**:

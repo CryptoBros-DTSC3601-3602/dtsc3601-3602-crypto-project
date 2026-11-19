@@ -69,12 +69,24 @@ public API or inference endpoint.
    docker build -f training/Dockerfile, push it to private ECR, review a SAM
    change set with its digest, and validate one bounded workflow execution.
    Verify Binance reachability, IAM, failed-job history and candidate artifacts.
-4. Implement approved candidate promotion/rollback and endpoint-free inference
-   behind Lambda for future API Gateway access. Pending predictions cannot
-   supply correctness labels until an inference path produces completed outputs.
+4. Decide how operators will approve a model version for serving. Item 12 of the
+   project brief requires keeping the previous model available until promotion
+   succeeds. Automatic promotion and rollback are pending a scope decision.
+   For private inference, publish the locally tested inference image and supply its
+   digest as InferenceImage. Verify completed predictions and later evaluations in
+   DynamoDB. Frontend/API access remains a future milestone.
 5. Review retention policies before enabling schedules. Existing hourly prediction
    and evaluation rules are enabled in the template. No AWS resources were
    created, started, modified or deleted in this local milestone.
+
+## Private inference checkpoint
+
+The existing prediction Lambda can call a private, on-demand inference Lambda
+packaged with the checked-in model. No public route or SageMaker endpoint is
+required. Nine local tests passed, SAM lint passed, and the Lambda runtime
+emulator predicted FLAT on the last 120 sample candles. The prediction record
+uses the scored bar timestamp and close. No AWS resources were provisioned.
+If deployed, inference adds Lambda requests, duration, logs, and ECR storage.
 
 ## Validation on full-serverless
 

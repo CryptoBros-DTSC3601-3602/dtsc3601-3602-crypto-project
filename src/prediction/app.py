@@ -14,6 +14,8 @@ BUCKET_NAME = os.environ["DATA_BUCKET"]
 TABLE_NAME = os.environ["PREDICTIONS_TABLE"]
 SAGEMAKER_ENDPOINT = os.environ.get("SAGEMAKER_ENDPOINT", "")
 
+INFERENCE_FUNCTION = os.environ.get("INFERENCE_FUNCTION", "")
+
 BINANCE_URL = "https://api.binance.us/api/v3/klines"
 SYMBOL = "BTCUSDT"
 INTERVAL = "15m"
@@ -75,6 +77,16 @@ def decimal(value):
 
 
 def invoke_prediction(candles):
+    if INFERENCE_FUNCTION:
+        response = boto3.client("lambda", region_name=REGION).invoke(
+            FunctionName=INFERENCE_FUNCTION,
+            Payload=json.dumps({"candles": candles}).encode(),
+        )
+        if response.get("FunctionError"):
+            raise RuntimeError("Private inference Lambda failed")
+        body = json.loads(response["Payload"].read())
+        body["status"] = "completed"
+        return body
     if not SAGEMAKER_ENDPOINT:
         return {
             "status": "pending_sagemaker",
@@ -122,7 +134,8 @@ def handler(event, context):
         raw_key = store_raw_data(now, candles)
         prediction = invoke_prediction(candles)
 
-        latest_close = candles[-1]["close"] if candles else None
+        latest = candles[-1] if candles else {}
+        latest_close = prediction.get("close", latest.get("close"))
         prediction_id = now.strftime("%Y%m%dT%H%M%SZ")
         item = {
             "prediction_id": prediction_id,
@@ -130,7 +143,7 @@ def handler(event, context):
             "interval": INTERVAL,
             "horizon_minutes": 60,
             "created_at": iso_utc(now),
-            "bar_time_utc": candles[-1]["open_time_utc"] if candles else None,
+            "bar_time_utc": prediction.get("bar_time_utc", latest.get("open_time_utc")),
             "close": decimal(latest_close) if latest_close is not None else None,
             "status": prediction["status"],
             "prediction": prediction.get("prediction"),
@@ -139,7 +152,8 @@ def handler(event, context):
                 for label, probability in prediction.get("probabilities", {}).items()
             },
             "raw_s3_key": raw_key,
-            "endpoint_name": SAGEMAKER_ENDPOINT or None,
+            "endpoint_name": (SAGEMAKER_ENDPOINT or None) if not INFERENCE_FUNCTION else None,
+            "inference_function": INFERENCE_FUNCTION or None,
         }
 
         predictions.put_item(Item={key: value for key, value in item.items() if value is not None})
