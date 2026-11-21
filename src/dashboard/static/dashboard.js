@@ -7,6 +7,17 @@ const date = value => value ? new Intl.DateTimeFormat("en", {
 const digest = value => value ? value.slice(0, 19) : "—";
 let chartData = [];
 
+function showNextPrediction() {
+  const now = new Date();
+  const next = new Date(now);
+  next.setUTCMinutes(60, 0, 0);
+  const label = element("next-prediction");
+  label.dateTime = next.toISOString();
+  label.textContent = date(next);
+  setTimeout(showNextPrediction, next - now);
+}
+showNextPrediction();
+
 function drawChart() {
   if (!chartData.length) return;
   const canvas = element("accuracy-chart");
