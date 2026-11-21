@@ -8,9 +8,19 @@ from pathlib import Path
 import joblib
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.inspection import permutation_importance
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 from feature_engineering import FEATURE_COLUMNS, latest_feature_row
+
+
+def explain_model(model, test):
+    """Mean change in holdout accuracy when one feature is shuffled."""
+    result = permutation_importance(model, test[FEATURE_COLUMNS], test["target"],
+                                    scoring="accuracy", n_repeats=5, random_state=42, n_jobs=1)
+    return {"rows": len(test), "start": test["open_time_utc"].iloc[0].isoformat(),
+            "end": test["open_time_utc"].iloc[-1].isoformat(),
+            "scores": dict(zip(FEATURE_COLUMNS, result.importances_mean.tolist()))}
 
 
 def train_direction_model(
@@ -18,6 +28,7 @@ def train_direction_model(
     test_fraction: float = 0.2,
     random_state: int = 42,
     gap_bars: int = 0,
+    explain: bool = False,
 ) -> tuple[HistGradientBoostingClassifier, dict]:
     """Train and evaluate a classifier using a chronological holdout.
 
@@ -46,6 +57,8 @@ def train_direction_model(
     model.fit(train[FEATURE_COLUMNS], train["target"])
     predictions = model.predict(test[FEATURE_COLUMNS])
     metrics = _metrics(test["target"], predictions, len(train), len(test))
+    if explain:
+        metrics["importance"] = explain_model(model, test)
     return model, metrics
 
 

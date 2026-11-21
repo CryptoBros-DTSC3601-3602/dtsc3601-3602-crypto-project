@@ -11,6 +11,7 @@ STATIC = Path(__file__).resolve().parents[1] / "src/dashboard/static"
 NOW = datetime.now(timezone.utc).isoformat()
 DIGEST = "sha256:9b2c80503af34db98bfb370835c11010ced4123d062b2347efe037ab9c71e424"
 FIXTURE = {
+    "baseline_importance": json.loads((STATIC.parent / "baseline_importance.json").read_text()),
     "updated_at": NOW, "active_model_digest": DIGEST, "training_configured": True,
     "forecast": {
         "prediction": "UP", "close": 94982.20, "created_at": NOW, "model_digest": DIGEST,

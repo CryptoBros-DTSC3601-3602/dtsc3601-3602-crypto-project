@@ -195,6 +195,15 @@ averages, RSI, volatility, and volume features need historical values.
 
 ## Serverless development on `full-serverless`
 
+The dashboard displays times in fixed Eastern Standard Time (UTC−5). The next
+scheduled prediction is the next whole hour. The feature importance chart ranks
+the mean change in classification accuracy across five shuffles per input.
+The baseline chart uses 288 labeled examples after the baseline was committed,
+beginning November 17 at 9 p.m. EST and ending November 20 at 8:45 p.m. EST.
+The training workflow computes each new model's scores on its own chronological
+holdout. Model selection shows the evaluation period and sample size because
+these can differ between runs. Correlated features can share predictive signal.
+
 The hourly prediction Lambda fetches closed candles from Binance.US and stores the
 raw input in S3. Set the SAM parameter `InferenceImage` to the immutable digest
 URI of the private inference image to run the packaged baseline model in Lambda.

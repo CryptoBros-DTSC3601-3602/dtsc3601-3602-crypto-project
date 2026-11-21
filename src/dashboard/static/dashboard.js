@@ -2,8 +2,8 @@ const element = id => document.getElementById(id);
 const put = (id, value) => { element(id).textContent = value; };
 const percent = value => value == null ? "—" : (100 * value).toFixed(1) + "%";
 const date = value => value ? new Intl.DateTimeFormat("en", {
-  month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC"
-}).format(new Date(value)) + " UTC" : "—";
+  month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Etc/GMT+5"
+}).format(new Date(value)) + " EST" : "—";
 const digest = value => value ? value.slice(0, 19) : "—";
 let chartData = [];
 
@@ -55,6 +55,34 @@ function drawChart() {
 }
 
 function render(data) {
+  const choices = element("importance-model");
+  const prior = choices.value;
+  const reports = new Map([["Baseline", data.baseline_importance],
+    ...data.training_runs.map(run => [run.id, run.importance])]);
+  choices.replaceChildren(...Array.from(reports.keys(), id => new Option(id, id)));
+  if (reports.has(prior)) choices.value = prior;
+  function renderImportance() {
+    const report = reports.get(choices.value);
+    const scores = Object.entries(report?.scores || {}).sort((a, b) => b[1] - a[1]);
+    const scale = Math.max(0.000001, ...scores.map(([, score]) => Math.abs(score)));
+    put("importance-period", report ? report.rows + " evaluation examples · " + date(report.start) + " to " + date(report.end)
+      : "No feature importance recorded for this model.");
+    element("importance-bars").replaceChildren(...scores.map(([name, score]) => {
+      const row = document.createElement("li");
+      const label = document.createElement("span");
+      label.textContent = name.replaceAll("_", " ");
+      const bar = document.createElement("meter");
+      bar.max = scale;
+      bar.value = Math.abs(score);
+      bar.setAttribute("aria-hidden", "true");
+      const amount = document.createElement("strong");
+      amount.textContent = (100 * score).toFixed(2) + " pp";
+      row.append(label, bar, amount);
+      return row;
+    }));
+  }
+  choices.onchange = renderImportance;
+  renderImportance();
   put("freshness", data.sample ? "Sample data" : data.updated_at ? "Updated " + date(data.updated_at) : "Awaiting first update");
   const forecast = data.forecast;
   const labels = {UP: "Up", DOWN: "Down", FLAT: "Flat"};

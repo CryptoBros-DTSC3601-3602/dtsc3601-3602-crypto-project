@@ -2,6 +2,7 @@
 import heapq
 import json
 import os
+from pathlib import Path
 from datetime import datetime, timezone
 
 import boto3
@@ -46,10 +47,14 @@ def build_snapshot(newest, history, image):
     runs = []
     for run in heapq.nlargest(10, history, key=lambda row: (row["started_at"], row["id"])):
         metrics = run.get("metrics", {})
+        importance = metrics.get("importance")
         runs.append({
             "id": run["id"],
             "started_at": datetime.fromtimestamp(int(run["started_at"]), timezone.utc).isoformat(),
             "status": run["status"],
+            "importance": {"rows": int(importance["rows"]), "start": importance["start"],
+                           "end": importance["end"], "scores": {k: float(v) for k, v in importance["scores"].items()}}
+                          if importance else None,
             "accuracy": float(metrics["accuracy"]) if "accuracy" in metrics else None,
             "test_rows": int(metrics["test_rows"]) if "test_rows" in metrics else None,
         })
@@ -57,6 +62,7 @@ def build_snapshot(newest, history, image):
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "forecast": forecast,
         "training_runs": runs,
+        "baseline_importance": json.loads(Path(__file__).with_name("baseline_importance.json").read_text()),
         "active_model_digest": model_digest(image),
     }
 

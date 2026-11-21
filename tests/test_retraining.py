@@ -68,6 +68,8 @@ def test_training_and_quality_gate(tmp_path):
     model, metrics = validate(candles)
     assert metrics["train_rows"] == 136
     assert metrics["test_rows"] == 35
+    assert metrics["importance"]["rows"] == 35
+    assert "volatility_12" in metrics["importance"]["scores"]
     with pytest.raises(ValueError):
         save_candidate(model, {**metrics, "accuracy": 0.549}, tmp_path)
     assert not list(tmp_path.iterdir())

@@ -26,7 +26,7 @@ def training_features(candles):
 def validate(candles):
     features = training_features(candles)
     # Purge four rows so training labels cannot use prices in the holdout.
-    return train_direction_model(features, gap_bars=4)
+    return train_direction_model(features, gap_bars=4, explain=True)
 
 
 def main():

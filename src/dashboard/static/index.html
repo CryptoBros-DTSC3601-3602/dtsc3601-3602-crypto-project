@@ -25,7 +25,7 @@
         <div class="section-head"><h2 id="forecast-title">Latest forecast</h2><span class="tag">60 MIN</span></div>
         <div class="prediction" id="direction">—</div>
         <p class="muted" id="forecast-time">Waiting for the latest forecast</p>
-        <p class="muted">Next scheduled prediction <time id="next-prediction">at the top of the hour (UTC)</time></p>
+        <p class="muted">Next scheduled prediction <time id="next-prediction">at the top of the hour (EST)</time></p>
         <dl class="probabilities">
           <div><dt><i class="up"></i>Up</dt><dd id="up">—</dd></div>
           <div><dt><i class="flat"></i>Flat</dt><dd id="flat">—</dd></div>
@@ -51,6 +51,13 @@
       <div class="section-head history-head"><div><h2 id="history-title">Model training history</h2><p class="muted">The ten most recent retraining runs and their holdout results.</p></div><div class="active-model"><span>Configured model</span><strong id="model">—</strong></div></div>
       <div id="history-empty" class="empty">Loading training history…</div>
       <div class="table-wrap" id="table-wrap" hidden><table><thead><tr><th scope="col">Training run</th><th scope="col">Started</th><th scope="col">Status</th><th scope="col">Holdout accuracy</th><th scope="col">Test rows</th></tr></thead><tbody id="runs"></tbody></table></div>
+    </section>
+    <section class="card history" aria-labelledby="importance-title">
+      <h2 id="importance-title">Feature importance</h2>
+      <p class="muted">Each score is the average drop in accuracy, in percentage points (pp), when one input is shuffled five times. Larger positive values indicate greater reliance. A negative value means shuffling improved accuracy on this sample.</p>
+      <label>Model <select id="importance-model"></select></label>
+      <p class="muted" id="importance-period"></p>
+      <ol id="importance-bars"></ol>
     </section>
   </main>
   <footer class="wrap"><span>CryptoBros</span><span>BTCUSDT · Scheduled hourly</span></footer>

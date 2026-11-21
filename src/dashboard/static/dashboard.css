@@ -67,3 +67,8 @@ footer span:first-child{font-weight:700}
 @media(max-width:760px){.wrap{width:calc(100% - 36px)}.overview{grid-template-columns:1fr}.page-head{align-items:start;flex-direction:column;gap:12px;padding-top:30px}.card{padding-inline:20px}}
 @media(max-width:430px){nav{gap:12px;font-size:12px}.brand{font-size:16px}.mark{width:25px;height:25px;margin-right:3px}.history-head{align-items:start;flex-direction:column;gap:10px}.forecast-footer strong,.active-model strong{font-size:12px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+#importance-bars { list-style: none; padding: 0; }
+#importance-bars li { display: grid; grid-template-columns: minmax(7em, 1fr) 2fr 5em; gap: .75em; align-items: center; margin: .45em 0; }
+#importance-bars meter { width: 100%; }
+#importance-bars strong { text-align: right; font-variant-numeric: tabular-nums; }
+#importance-model { max-width: 100%; }
