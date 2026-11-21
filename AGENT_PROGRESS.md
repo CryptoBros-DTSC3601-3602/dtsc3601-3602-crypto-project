@@ -1,5 +1,106 @@
 # Agent progress journal
 
+## November 21, 2026 training rehearsal
+
+Binance.US returned 35,004 of 35,040 candles requested over the last year.
+The previous trainer rejected the entire dataset. The updated trainer requires
+99% coverage and splits at gaps before computing features or future targets.
+The training image passed a local replay using those actual candles. Its
+chronological holdout accuracy was **56.64% on 6,842 examples**, with 27,364
+training rows. The local release rehearsal produced a candidate archive,
+passed the README packaging step, and returned a `FLAT` forecast with valid
+probabilities from the candidate Lambda image. The rehearsals ran locally and
+did not write to AWS history. All 13 focused tests passed.
+
+The private training image digest is
+`sha256:556a4123a57ef19838d7d06bf521f7a22a79177ac3866e4e834d4930a3c8d492`.
+Change set `trainer-gap-handling-556a4123` updates the workflow's training
+image. The first scheduled eligibility check succeeded November 20 at 10:45 p.m.
+Eastern. The November 21, 2:25 p.m. Eastern dashboard snapshot showed 9 of
+20 live forecasts correct (45%). Live candidate validation and production
+promotion still depend on an eligible run and a passing holdout.
+
+## November 20, 2026 presentation checkpoint
+
+Both the workflow deployment and the approved daily schedule update reached
+`UPDATE_COMPLETE` in Ohio. EventBridge targets the deployed Standard workflow
+at 03:45 UTC each day (10:45 p.m. Eastern in November). Hourly prediction,
+evaluation and dashboard publishing continue. Inference uses the private Lambda.
+The bounded SageMaker training job incurs compute charges only on admission.
+Other usage includes ECR and S3 storage, DynamoDB data and backups, Lambda,
+API Gateway, workflow transitions and logs. There is no scheduled shutdown.
+
+The live Step Functions execution `presentation-window-check-20261120` reached
+`CheckWindow`, `Eligible`, and `Done`. Its result was `train=false` with
+three scored predictions. The live dashboard and its JSON showed 2 correct of
+3 scored (66.7%) both for the rolling window and across all served versions.
+Verified the published totals in Edge, and verified the EventBridge rule state
+and state machine target. All 12 tests passed, as did SAM lint and build.
+The dashboard regression fixture counts 100 correct of 102 overall while the
+latest 100 are all correct.
+
+**December 1 presentation checks (Eastern time)**
+
+1. Open https://bvtbp86dfl.execute-api.us-east-2.amazonaws.com/ on November 24
+   after 10:25 p.m. At one new score per hour the dashboard should show its
+   first complete window. The 10:45 p.m. workflow uses the most recent live
+   scores. At 55 or more correct, show the successful skipped execution in
+   Step Functions and check subsequent days.
+2. After an eligible execution finishes, inspect its SageMaker job and its
+   run-specific S3 inputs and metrics, then check the history after the next
+   hourly snapshot. For a validated candidate, use the manual release steps in
+   the README, review and approve the digest change, and verify the serving
+   digest on the next forecast. Keep the previous digest available.
+3. On December 1, show the forecast, rolling and all-time scores with their
+   denominators, and actual workflow history. The labeled local preview can
+   illustrate candidate history if no production candidate qualifies.
+
+## November 20, 2026 retraining deployment review
+
+Published the locally tested linux/amd64 image to the private immutable-tag
+ECR repository `dtsc3601-btcusdt-training` in Ohio. Its digest is
+`sha256:3309086691b6ab89477b573a4a313a8ed19157d3dafcabf9cacafa677e77c382`.
+The image adds about 167 MB of listed compressed storage. SAM lint and all
+12 focused tests passed. Step Functions validated the substituted Standard
+workflow definition with zero diagnostics. The regional ml.m5.large training
+quota was 15 and there were zero training jobs in progress.
+
+Staged change set `training-workflow-20261120214545` for execution approval.
+It adds the state machine, decision Lambda, history table, roles and disabled
+daily rule, and connects the dashboard publisher to history. No live training
+execution has been validated.
+
+### When and how to verify
+
+With three forecasts scored at 9:15 p.m. Eastern on November 20, the first
+full window is expected around **November 24 at 10:15 p.m. Eastern** assuming
+uninterrupted hourly scoring. Check the public dashboard after its 10:25 p.m.
+refresh. Eligibility requires at most 54 correct of the latest 100 and a
+clear seven-day cooldown. At 55 or more correct, continue collecting outcomes.
+
+After deployment, locate `RetrainingWorkflow` under the CloudFormation
+stack's Resources tab in us-east-2. After explicit training approval, start
+one Standard execution with input `{}`. An eligible run should reserve one
+history record and start one bounded SageMaker job. Inspect the execution,
+the job status, and the run-specific S3 candles and metrics. A passing
+candidate also has an artifact URI and validated history. A below-threshold
+candidate should leave a failed history record. Check the next hourly dashboard
+snapshot for the run. Release a validated candidate manually using the README.
+Obtain separate approval before enabling recurring paid runs.
+
+## November 20, 2026 public dashboard
+
+The approved dashboard change set reached `UPDATE_COMPLETE`. The public
+read-only site is https://bvtbp86dfl.execute-api.us-east-2.amazonaws.com/.
+Verified the HTML, CSS, JavaScript and JSON API returned HTTP 200, and Edge
+rendered the live forecast and accuracy. After the initial snapshot, the
+hourly publisher refreshed the public API at 9:25 p.m. Eastern with two
+correct forecasts out of three scored.
+
+API Gateway, the website and publisher Lambdas, the on-demand snapshot table,
+and the hourly rule are deployed. Usage can incur API, Lambda, DynamoDB,
+log and transfer charges. Training is disabled.
+
 ## November 20, 2026 live backend
 
 Executed the approved backend change set. The stack reached `UPDATE_COMPLETE`

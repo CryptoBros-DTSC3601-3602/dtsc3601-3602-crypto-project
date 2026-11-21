@@ -16,7 +16,8 @@ FIXTURE = {
         "prediction": "UP", "close": 94982.20, "created_at": NOW, "model_digest": DIGEST,
         "probabilities": {"UP": 0.68, "FLAT": 0.22, "DOWN": 0.10},
     },
-    "accuracy": {"outcomes": [int((index * 39) % 73 < 46) for index in range(100)]},
+    "accuracy": {"outcomes": [int((index * 39) % 73 < 46) for index in range(100)],
+                 "total_correct": 151, "total_scored": 250},
     "training_runs": [
         {"id": "Sample run 03", "started_at": NOW, "status": "validated", "accuracy": 0.61, "test_rows": 6890},
         {"id": "Sample run 02", "started_at": NOW, "status": "failed", "accuracy": None, "test_rows": None},

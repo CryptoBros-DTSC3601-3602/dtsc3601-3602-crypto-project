@@ -44,6 +44,8 @@ def test_pipeline_records_reach_public_dashboard(monkeypatch):
     assert data["forecast"]["model_digest"] == "sha256:1234"
     assert data["active_model_digest"] == "sha256:abcd"
     assert data["accuracy"]["outcomes"] == [1] * 100
+    assert data["accuracy"]["total_correct"] == 100
+    assert data["accuracy"]["total_scored"] == 102
     assert [run["id"] for run in data["training_runs"]] == ["btc-test"]
     assert data["training_runs"][0]["accuracy"] == 0.61
     assert "private" not in public["body"]

@@ -221,10 +221,19 @@ The response contains the predicted class, probabilities, close and model bar ti
 For eventual AWS validation, store each linux/amd64 image in private ECR in
 `us-east-2` and supply the two digest URIs as `InferenceImage` and `TrainingImage`
 in the SAM change set. Review existing hourly schedules and permissions before
-applying it. The retraining schedule defaults to disabled. When enabled,
+applying it. The `RetrainingScheduleState` parameter defaults to `DISABLED`.
+The presentation stack uses `ENABLED` and checks daily at 03:45 UTC
+(10:45 p.m. Eastern on the preceding calendar day in November and December).
+When enabled,
 the workflow checks the last 100 evaluated predictions, reserves an eligible
-window in DynamoDB, and submits one time-limited training job. A passing job
+window in DynamoDB when fewer than 55 were correct and seven days have elapsed
+since any previous reservation, and submits one time-limited training job. A passing job
 produces a versioned S3 candidate.
+
+Binance.US can omit 15-minute intervals. The trainer requests the past year,
+requires at least 99% of the expected candles, and calculates indicators and
+60-minute targets separately within each consecutive segment. The S3 metrics
+record observed and missing candle counts alongside chronological holdout accuracy.
 
 ### Release an approved retrained model
 
@@ -306,6 +315,12 @@ the same origin, so the browser needs no separate API URL or credentials.
 
 The dashboard publishes its first snapshot at 25 minutes past the hour. To
 publish it immediately, invoke the snapshot function named in the stack output.
+
+The recent accuracy card uses the latest 100 scored forecasts, or all available
+while the first window fills. All-time live accuracy counts every scored
+production forecast across served model versions. Both exclude forecasts that
+are waiting for their outcome. Training history reports a separate accuracy
+calculated on held-out historical candles.
 
 ```powershell
 $Stack = aws cloudformation describe-stacks --stack-name dtsc3601-crypto-serverless --profile dtsc3601-crypto --region us-east-2 --output json | ConvertFrom-Json

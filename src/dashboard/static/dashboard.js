@@ -59,6 +59,10 @@ function render(data) {
   element("forecast-model").title = forecast?.model_digest || "";
   put("close", forecast?.close == null ? "—" : new Intl.NumberFormat("en", {maximumFractionDigits: 2}).format(forecast.close) + " USDT");
   const outcomes = data.accuracy.outcomes;
+  const {total_correct, total_scored} = data.accuracy;
+  put("all-time-accuracy", total_scored > 0
+    ? percent(total_correct / total_scored) + " · " + total_correct + " correct out of " + total_scored + " scored across all served models"
+    : total_scored === 0 ? "No scored forecasts yet" : "Awaiting updated totals");
   let correct = 0;
   chartData = outcomes.map((outcome, index) => (correct += outcome) / (index + 1));
   put("accuracy-number", percent(chartData.at(-1)));

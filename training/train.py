@@ -11,8 +11,20 @@ from historical_backfill import convert_to_csv, fetch_historical_data, TOTAL_CAN
 from modeling import save_model, train_direction_model
 
 
+def training_features(candles):
+    times = candles["open_time"]
+    if not times.is_monotonic_increasing or not times.is_unique or (times % INTERVAL_MS != 0).any():
+        raise ValueError("Training candles must be ordered, unique and on 15-minute boundaries")
+    # Restart indicators and discard incomplete targets at each exchange data gap.
+    segments = times.diff().ne(INTERVAL_MS).cumsum()
+    return pd.concat([
+        create_features(segment, timeframe="15min", horizon_bars=4, flat_threshold=0.002)
+        for _, segment in candles.groupby(segments, sort=False)
+    ], ignore_index=True)
+
+
 def validate(candles):
-    features = create_features(candles, timeframe="15min", horizon_bars=4, flat_threshold=0.002)
+    features = training_features(candles)
     # Purge four rows so training labels cannot use prices in the holdout.
     return train_direction_model(features, gap_bars=4)
 
@@ -21,12 +33,13 @@ def main():
     bucket = os.environ["DATA_BUCKET"]
     prefix = "retraining/" + os.environ["RUN_ID"]
     rows = fetch_historical_data()
-    times = [row["open_time"] for row in rows]
-    if len(times) != TOTAL_CANDLES or any(b - a != INTERVAL_MS for a, b in zip(times, times[1:])):
-        raise ValueError("Training requires a complete year of consecutive candles")
+    if not 0.99 * TOTAL_CANDLES <= len(rows) <= TOTAL_CANDLES:
+        raise ValueError("Training requires at least 99% of the year's 15-minute candles")
     s3 = boto3.client("s3")
     s3.put_object(Bucket=bucket, Key=f"{prefix}/candles.csv", Body=convert_to_csv(rows).encode())
     model, metrics = validate(pd.DataFrame(rows))
+    metrics["observed_candles"] = len(rows)
+    metrics["missing_candles"] = TOTAL_CANDLES - len(rows)
     s3.put_object(Bucket=bucket, Key=f"{prefix}/metrics.json", Body=json.dumps(metrics).encode())
     save_candidate(model, metrics, Path("/opt/ml/model"))
 

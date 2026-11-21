@@ -70,6 +70,7 @@ def read_snapshot(dynamo, predictions_table, history_table, image):
     latest = None
     # Keep a bounded, chronologically sorted heap while reading all scan pages.
     evaluated = []
+    total_scored = total_correct = 0
     for row in completed:
         key = row["prediction_id"]
         if row.get("prediction") in {"UP", "DOWN", "FLAT"} and (
@@ -77,6 +78,8 @@ def read_snapshot(dynamo, predictions_table, history_table, image):
         ):
             latest = row
         if isinstance(row.get("correct"), bool):
+            total_scored += 1
+            total_correct += int(row["correct"])
             entry = (key, row["correct"])
             if len(evaluated) < 100:
                 heapq.heappush(evaluated, entry)
@@ -87,7 +90,11 @@ def read_snapshot(dynamo, predictions_table, history_table, image):
                    "attribute_exists(started_at)", {"#status": "status", "#metrics": "metrics"},
                    {}) if history_table else []
     snapshot = build_snapshot(latest, history, image)
-    snapshot["accuracy"] = {"outcomes": [int(correct) for _, correct in sorted(evaluated)]}
+    snapshot["accuracy"] = {
+        "outcomes": [int(correct) for _, correct in sorted(evaluated)],
+        "total_scored": total_scored,
+        "total_correct": total_correct,
+    }
     snapshot["training_configured"] = bool(history_table)
     return snapshot
 

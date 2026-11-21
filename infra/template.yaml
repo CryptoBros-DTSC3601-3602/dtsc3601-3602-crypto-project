@@ -31,6 +31,12 @@ Parameters:
     AllowedValues: ['true', 'false']
     Description: Enable the public read-only website and hourly snapshot.
 
+  RetrainingScheduleState:
+    Type: String
+    Default: DISABLED
+    AllowedValues: [DISABLED, ENABLED]
+    Description: Enable the daily eligibility check and any admitted training jobs.
+
 Conditions:
   PublicDashboard: !Equals [!Ref DashboardEnabled, 'true']
   InferenceConfigured: !Not [!Equals [!Ref InferenceImage, '']]
@@ -225,8 +231,8 @@ Resources:
         CheckAccuracy:
           Type: Schedule
           Properties:
-            Schedule: rate(1 day)
-            Enabled: false
+            Schedule: cron(45 3 * * ? *)
+            State: !Ref RetrainingScheduleState
       Policies:
         - LambdaInvokePolicy: {FunctionName: !Ref RetrainingFunction}
         - Statement:

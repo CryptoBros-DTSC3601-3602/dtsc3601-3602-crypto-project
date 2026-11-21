@@ -7,7 +7,7 @@ import pytest
 from moto import mock_aws
 
 from src.retraining import app
-from training.train import save_candidate, validate
+from training.train import save_candidate, training_features, validate
 
 
 @pytest.fixture
@@ -73,6 +73,15 @@ def test_training_and_quality_gate(tmp_path):
     assert not list(tmp_path.iterdir())
     save_candidate(model, {**metrics, "accuracy": 0.55}, tmp_path)
     assert joblib.load(tmp_path / "btcusdt_direction_15m_60m.joblib")["model"].classes_.size == 3
+
+
+def test_exchange_gap_resets_features_and_excludes_cross_gap_targets():
+    candles = pd.read_csv(Path(__file__).resolve().parents[1] / "data/sample_btcusdt_15m.csv")
+    before, after = candles.iloc[:100], candles.iloc[106:]
+    actual = training_features(pd.concat([before, after]))
+    expected = pd.concat([training_features(before), training_features(after)], ignore_index=True)
+    pd.testing.assert_frame_equal(actual, expected)
+    assert not actual.empty
 
 
 def test_candidate_history_records_version_and_metrics(tables, monkeypatch):

@@ -20,7 +20,8 @@ inventory, validation results, and deployment commands.
 - With `DashboardEnabled=true`, API Gateway serves the read-only site and
   `/api/dashboard` from one origin. At minute 25 UTC, a publisher writes a
   sanitized DynamoDB snapshot with the latest completed forecast, up to 100
-  scored outcomes, and up to 10 training runs when training is configured.
+  scored outcomes, total scored and correct across all model versions, and up
+  to 10 training runs when training is configured.
   The public Lambda reads the snapshot. The site exposes no inference or
   training triggers. Preview labeled sample data with
   `python bin/preview_dashboard.py` at `http://localhost:8000`.
@@ -29,7 +30,9 @@ inventory, validation results, and deployment commands.
   forecasts and accuracy below 55%. A DynamoDB transaction reserves the window
   and enforces a seven-day cooldown even after failure. An admitted run uses one
   SageMaker `ml.m5.large`, 5 GB, and a 30-minute training runtime cap. The job
-  fetches a year of consecutive completed candles, holds out the last 20%
+  fetches a year of completed candles and requires at least 99% interval coverage.
+  It resets indicators at each gap and excludes labels that would cross a gap.
+  It holds out the last 20% of usable examples
   chronologically with a four-bar purge, and requires at least 55% holdout
   accuracy to emit a candidate. History, training inputs, metrics, and passing
   model artifacts are keyed by run.
@@ -52,5 +55,8 @@ schedules. Keep `SagemakerEndpointName` empty and use private Lambda inference.
 Endpoint creation, modification, and deletion are outside the scope. Review
 changes before creating resources. Obtain approval before executing a change set
 or changing live schedules, and separate approval before starting paid training.
-Keep the retraining rule disabled. Record live verification and the final status
-of billable resources in the progress journal.
+The owner approved recurring eligible jobs on November 20, 2026. The live stack
+sets `RetrainingScheduleState=ENABLED` and checks daily at 03:45 UTC. Preserve
+this parameter on subsequent releases. The seven-day cooldown starts when a job
+is admitted. See the latest progress journal entry for the December 1 verification
+plan and current status.
