@@ -50,3 +50,11 @@ def test_pipeline_records_reach_public_dashboard(monkeypatch):
     assert data["training_runs"][0]["accuracy"] == 0.61
     assert "private" not in public["body"]
     assert app.handler({"rawPath": "/"}, None)["statusCode"] == 200
+
+    digest = "sha256:" + "f" * 64
+    tables["training"].put_item(Item={"id": "control", "active_model": {"run": "btc-test", "digest": digest}})
+    table.update_item(Key={"prediction_id": "101"}, UpdateExpression="SET model_digest = :digest",
+                      ExpressionAttributeValues={":digest": digest})
+    snapshot.handler({}, None)
+    released = json.loads(app.handler({"rawPath": "/api/dashboard"}, None)["body"])
+    assert released["active_model_digest"] == released["forecast"]["model_digest"] == digest

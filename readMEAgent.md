@@ -36,11 +36,12 @@ inventory, validation results, and deployment commands.
   chronologically with a four-bar purge, and requires at least 55% holdout
   accuracy to emit a candidate. History, training inputs, metrics, and passing
   model artifacts are keyed by run.
-- Serving releases are manual. Select a trusted `validated` run, use
-  `bin/prepare_candidate_image.py`, and build and smoke-test a candidate
-  `linux/amd64` Lambda image. Deploy its immutable ECR digest as
-  `InferenceImage` after change-set approval. Keep the prior digest available
-  to restore. Automated promotion and rollback require a separate scope decision.
+- With the automatic release workflow and private inference runtime deployed,
+  a validated candidate receives a private preview invocation and a production
+  serving check. A DynamoDB transaction selects the candidate and preserves
+  the previous model for automatic rollback. Each forecast records the model
+  identity returned by the serving function. See the progress journal for
+  deployment status and the README for the release states.
 
 ## AWS access and approvals
 

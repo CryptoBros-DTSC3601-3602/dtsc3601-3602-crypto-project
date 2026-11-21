@@ -2,11 +2,14 @@
 import hashlib
 import heapq
 import json
+import math
 import os
+import re
 import time
 from decimal import Decimal
 
 import boto3
+from boto3.dynamodb.types import TypeSerializer
 from botocore.exceptions import ClientError
 
 WINDOW = 100
@@ -64,10 +67,96 @@ def reserve(db, table, run, window, now):
     return True
 
 
+def check_serving(run_record, preview=False):
+    dynamo = boto3.resource("dynamodb")
+    forecast = dynamo.Table(os.environ["PREDICTIONS_TABLE"]).get_item(
+        Key={"prediction_id": run_record["window_end"]}, ConsistentRead=True)["Item"]
+    obj = boto3.client("s3").get_object(Bucket=os.environ["DATA_BUCKET"], Key=forecast["raw_s3_key"])
+    with obj["Body"] as stream:
+        payload = {"candles": json.load(stream)["candles"]}
+    if preview:
+        payload["preview_run"] = run_record["id"]
+    response = boto3.client("lambda").invoke(FunctionName=os.environ["INFERENCE_FUNCTION"],
+                                             Payload=json.dumps(payload).encode())
+    if response.get("FunctionError"):
+        raise ValueError("Serving check failed")
+    result = json.loads(response["Payload"].read())
+    probs = result["probabilities"]
+    if not (result["model_run"] == run_record["id"]
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", result["model_digest"])
+            and result["prediction"] in {"UP", "DOWN", "FLAT"}
+            and result["prediction"] in probs and probs.keys() <= {"UP", "DOWN", "FLAT"}
+            and all(0 <= p <= 1 for p in probs.values()) and math.isclose(sum(probs.values()), 1)
+            and 0 < result["close"] < math.inf and result["bar_time_utc"]):
+        raise ValueError("Invalid candidate forecast")
+    return {"run": run_record["id"], "digest": result["model_digest"]}
+
+
+def switch_model(table, record, previous, target, rollback=False):
+    # Change the serving pointer and release history together, including on retry.
+    encode = TypeSerializer().serialize
+    expected, status = ("verifying", "rolled_back") if rollback else ("validated", "verifying")
+    control_values = {":target": encode(target), ":previous": encode(previous)}
+    condition = "active_model = :previous"
+    if not previous:
+        condition = "(" + condition + " OR attribute_not_exists(active_model))"
+    history_values = {":expected": encode(expected), ":status": encode(status)}
+    update = "SET #s = :status"
+    if not rollback:
+        condition += " AND latest_prediction = :window"
+        control_values[":window"] = encode(record["window_end"])
+        update += ", previous_model = :previous, candidate_model = :candidate"
+        history_values.update({":previous": encode(previous), ":candidate": encode(target)})
+    boto3.client("dynamodb").transact_write_items(TransactItems=[
+        {"Update": {"TableName": table.name, "Key": {"id": encode("control")},
+                    "ConditionExpression": condition, "UpdateExpression": "SET active_model = :target",
+                    "ExpressionAttributeValues": control_values}},
+        {"Update": {"TableName": table.name, "Key": {"id": encode(record["id"])},
+                    "ConditionExpression": "#s = :expected", "UpdateExpression": update,
+                    "ExpressionAttributeNames": {"#s": "status"}, "ExpressionAttributeValues": history_values}},
+    ])
+
+
+def release(table, run, action):
+    record = table.get_item(Key={"id": run}, ConsistentRead=True)["Item"]
+    status = record["status"]
+    if action == "promote":
+        if status in ("deployed", "verifying"):
+            return
+        expected_uri = f"s3://{os.environ['DATA_BUCKET']}/retraining/artifacts/{run}/output/model.tar.gz"
+        if status != "validated" or record["artifact"] != expected_uri:
+            raise ValueError("Release requires the validated artifact from this run")
+        target = check_serving(record, preview=True)
+        control = table.get_item(Key={"id": "control"}, ConsistentRead=True)["Item"]
+        switch_model(table, record, control.get("active_model", {}), target)
+        return
+    if action == "recover":
+        if status == "verifying":
+            switch_model(table, record, record["candidate_model"], record["previous_model"], rollback=True)
+            return
+        if status in ("rolled_back", "release_failed", "deployed"):
+            return
+        expected, final = "validated", "release_failed"
+    elif action == "verify":
+        if status == "deployed":
+            return
+        if status != "verifying" or check_serving(record) != record["candidate_model"]:
+            raise ValueError("Production did not serve the selected candidate")
+        expected, final = "verifying", "deployed"
+    else:
+        raise ValueError("Unknown release action")
+    table.update_item(Key={"id": run}, UpdateExpression="SET #s = :final",
+                      ConditionExpression="#s = :expected", ExpressionAttributeNames={"#s": "status"},
+                      ExpressionAttributeValues={":expected": expected, ":final": final})
+
+
 def handler(event, context):
     run = "btc-" + hashlib.sha256(event["execution"].encode()).hexdigest()[:32]
     dynamo = boto3.resource("dynamodb")
     history = dynamo.Table(os.environ["RETRAINING_TABLE"])
+    if event.get("release_action"):
+        release(history, run, event["release_action"])
+        return {}
     if event.get("status"):
         values = {":status": event["status"]}
         names = {"#s": "status"}
@@ -82,7 +171,7 @@ def handler(event, context):
         history.update_item(Key={"id": run}, UpdateExpression=update,
                             ConditionExpression="attribute_exists(id)",
                             ExpressionAttributeNames=names, ExpressionAttributeValues=values)
-        return {}
+        return {"auto_release": bool(os.getenv("INFERENCE_FUNCTION"))}
     previous = history.get_item(Key={"id": run}, ConsistentRead=True).get("Item")
     if previous:
         return {"train": previous["status"] == "reserved", "run": run}

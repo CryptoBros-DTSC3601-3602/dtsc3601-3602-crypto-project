@@ -1,5 +1,30 @@
 # Agent progress journal
 
+## November 21, 2026 automatic model release
+
+Staged the automatic release implementation in Ohio as
+`samcli-deploy1795293440/b4214984-1442-42d1-89a2-2c8ca7112064`.
+The tested private inference runtime is
+`sha256:b3897ee350e0c9b25ec22adabbc79183c34ac6cd1de0df652d75e267a008b39e`.
+CloudFormation reported modifications to existing resources only. The reviewed
+change set requires owner approval to execute.
+
+All 19 focused tests passed. SAM lint and build passed. AWS Step Functions
+validated the substituted workflow definition with zero diagnostics.
+An offline run of the production container exercised baseline inference,
+preview and selection of the real local training artifact, digest rejection
+and restoration. Transaction tests covered a packaged baseline and a previously
+promoted model, including repeated calls during deployment and rollback.
+
+After applying the change set, verify the active workflow and private baseline
+invocation. On the first eligible passing training run, inspect `Promote` and
+`VerifyServing`, the run's `deployed` history status, and the model digest on
+the next hourly forecast and dashboard snapshot. Matching model digests confirm
+the live switch. The workflow now handles the release step in the earlier
+December 1 presentation checklist. Additional usage consists of private Lambda
+invocations, DynamoDB reads and transactions, S3 artifact reads, and workflow
+transitions.
+
 ## November 21, 2026 production trainer release
 
 Applied the approved `trainer-gap-handling-556a4123` change set in Ohio.

@@ -39,7 +39,7 @@ def build_snapshot(newest, history, image):
             for label, probability in newest.get("probabilities", {}).items()
             if label in {"UP", "DOWN", "FLAT"}
         }
-        forecast["model_digest"] = model_digest(newest.get("inference_image"))
+        forecast["model_digest"] = newest.get("model_digest") or model_digest(newest.get("inference_image"))
     else:
         forecast = None
 
@@ -64,7 +64,7 @@ def build_snapshot(newest, history, image):
 def read_snapshot(dynamo, predictions_table, history_table, image):
     completed = scan(
         dynamo.Table(predictions_table),
-        "prediction_id, prediction, created_at, bar_time_utc, #close, probabilities, inference_image, correct",
+        "prediction_id, prediction, created_at, bar_time_utc, #close, probabilities, inference_image, model_digest, correct",
         "#status = :completed", {"#status": "status", "#close": "close"}, {":completed": "completed"},
     )
     latest = None
@@ -90,6 +90,10 @@ def read_snapshot(dynamo, predictions_table, history_table, image):
                    "attribute_exists(started_at)", {"#status": "status", "#metrics": "metrics"},
                    {}) if history_table else []
     snapshot = build_snapshot(latest, history, image)
+    if history_table:
+        control = dynamo.Table(history_table).get_item(Key={"id": "control"}, ConsistentRead=True).get("Item", {})
+        if control.get("active_model"):
+            snapshot["active_model_digest"] = control["active_model"]["digest"]
     snapshot["accuracy"] = {
         "outcomes": [int(correct) for _, correct in sorted(evaluated)],
         "total_scored": total_scored,

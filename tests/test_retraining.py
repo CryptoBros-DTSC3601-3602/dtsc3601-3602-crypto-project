@@ -107,3 +107,85 @@ def test_candidate_history_records_version_and_metrics(tables, monkeypatch):
     assert item["metrics"]["accuracy"] == Decimal("0.6")
     assert item["artifact"] == artifact
     assert item["correct_of_100"] == 49
+
+
+@pytest.mark.parametrize("verify_ok", [True, False])
+@pytest.mark.parametrize("previous", [{}, {"run": "prior", "digest": "sha256:previous"}])
+def test_release_and_recovery_are_atomic_and_retryable(tables, monkeypatch, verify_ok, previous):
+    _, table = tables
+    monkeypatch.setenv("DATA_BUCKET", "project")
+    run = "btc-" + "1" * 32
+    target = {"run": run, "digest": "sha256:" + "1" * 64}
+    control = {"id": "control", "latest_prediction": "100"}
+    if previous:
+        control["active_model"] = previous
+    table.put_item(Item=control)
+    table.put_item(Item={"id": run, "status": "validated", "window_end": "100",
+                         "artifact": f"s3://project/retraining/artifacts/{run}/output/model.tar.gz"})
+
+    def check(record, preview=False):
+        if preview or verify_ok:
+            return target
+        raise ValueError("Verification failed")
+
+    def get(key):
+        return table.get_item(Key={"id": key})["Item"]
+
+    monkeypatch.setattr(app, "check_serving", check)
+    for _ in range(2):
+        app.release(table, run, "promote")
+    assert get("control")["active_model"] == target
+    assert get(run)["previous_model"] == previous
+    if verify_ok:
+        for _ in range(2):
+            app.release(table, run, "verify")
+        assert get(run)["status"] == "deployed"
+    else:
+        with pytest.raises(ValueError, match="Verification failed"):
+            app.release(table, run, "verify")
+        for _ in range(2):
+            app.release(table, run, "recover")
+        assert get("control")["active_model"] == previous
+        assert get(run)["status"] == "rolled_back"
+
+
+def test_failed_preview_keeps_current_selection(tables, monkeypatch):
+    _, table = tables
+    monkeypatch.setenv("DATA_BUCKET", "project")
+    table.put_item(Item={"id": "blocked", "status": "validated", "artifact": "wrong"})
+    with pytest.raises(ValueError, match="validated artifact"):
+        app.release(table, "blocked", "promote")
+    app.release(table, "blocked", "recover")
+    assert table.get_item(Key={"id": "blocked"})["Item"]["status"] == "release_failed"
+    assert "Item" not in table.get_item(Key={"id": "control"})
+
+
+def test_private_release_probe_replays_archived_forecast_and_checks_identity(tables, monkeypatch):
+    import io
+    import json
+    from unittest.mock import Mock
+
+    predictions, _ = tables
+    monkeypatch.setenv("DATA_BUCKET", "probe-candles")
+    monkeypatch.setenv("INFERENCE_FUNCTION", "private")
+    key = "serverless/predictions/raw/binance/BTCUSDT/sample.json"
+    predictions.put_item(Item={"prediction_id": "100", "raw_s3_key": key})
+    candles = [{"close": 100}]
+    clients = boto3.client
+    s3 = clients("s3")
+    s3.create_bucket(Bucket="probe-candles", CreateBucketConfiguration={"LocationConstraint": "us-east-2"})
+    s3.put_object(Bucket="probe-candles", Key=key, Body=json.dumps({"candles": candles}))
+    run = "btc-" + "2" * 32
+    digest = "sha256:" + "1" * 64
+    result = dict(model_run=run, model_digest=digest, probabilities={"FLAT": 1},
+                  close=100, prediction="FLAT", bar_time_utc="2026-11-21T12:00:00Z")
+    function = Mock()
+    function.invoke.side_effect = lambda **kwargs: {"Payload": io.BytesIO(json.dumps(result).encode())}
+    monkeypatch.setattr(app.boto3, "client", lambda name: function if name == "lambda" else clients(name))
+    record = {"id": run, "window_end": "100"}
+    assert app.check_serving(record, preview=True) == {"run": run, "digest": digest}
+    assert json.loads(function.invoke.call_args.kwargs["Payload"]) == {"candles": candles, "preview_run": run}
+    result["model_run"] = "baseline"
+    with pytest.raises(ValueError, match="Invalid candidate forecast"):
+        app.check_serving(record)
+    assert json.loads(function.invoke.call_args.kwargs["Payload"]) == {"candles": candles}

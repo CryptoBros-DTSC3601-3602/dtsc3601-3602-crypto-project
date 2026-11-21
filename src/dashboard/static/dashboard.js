@@ -75,7 +75,8 @@ function render(data) {
 
   put("model", digest(data.active_model_digest));
   element("model").title = data.active_model_digest || "";
-  const statuses = {reserved: "Reserved", validated: "Validated", failed: "Failed"};
+  const statuses = {reserved: "Reserved", validated: "Validated", failed: "Failed", verifying: "Verifying release",
+    deployed: "Deployed", rolled_back: "Rolled back", release_failed: "Release failed"};
   const rows = data.training_runs.map(run => {
     const tr = document.createElement("tr");
     const values = [run.id, date(run.started_at), statuses[run.status] ?? run.status,

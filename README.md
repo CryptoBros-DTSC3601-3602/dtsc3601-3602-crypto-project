@@ -235,26 +235,28 @@ requires at least 99% of the expected candles, and calculates indicators and
 60-minute targets separately within each consecutive segment. The S3 metrics
 record observed and missing candle counts alongside chronological holdout accuracy.
 
-### Release an approved retrained model
+### Automatic candidate release
 
-1. Select a DynamoDB history record with status `validated` and review its
-   chronological accuracy and test size. Download the recorded S3 artifact from
-   that trusted training run as `model.tar.gz`. The inference runtime loads a
-   serialized Python model, so use artifacts produced by the project workflow.
-2. Prepare and build the candidate image.
+With private Lambda inference configured, Step Functions takes a validated
+candidate through release automatically. It replays the candles from the last
+forecast in the eligibility window through the private inference Lambda. The
+Lambda checks the training archive's metrics and returns the SHA-256 digest
+of the candidate model along with its prediction. Only trusted project
+training artifacts belong under the training output prefix.
 
-   ```sh
-   python bin/prepare_candidate_image.py model.tar.gz /tmp/crypto-candidate
-   docker build --platform linux/amd64 -f /tmp/crypto-candidate/Dockerfile.lambda -t crypto-candidate /tmp/crypto-candidate
-   ```
+After a successful preview, a DynamoDB transaction records the previous model,
+selects the candidate and sets the run to `verifying`. The workflow then invokes
+the ordinary inference path with the same candles and checks the returned model
+identity, class, price and probabilities. Success marks the run `deployed`.
+A failed preview records `release_failed`. A failed production check restores
+the previous selection and records `rolled_back`. The dashboard publishes the
+training history on its next hourly refresh.
 
-3. Smoke-test the candidate image with the local inference request above. Publish
-   the approved image to private ECR and set `InferenceImage` to its digest
-   in the SAM change set. After applying it, verify that the next completed
-   prediction records the new digest as `inference_image`.
-4. Retain the previous image digest in ECR. To restore it, apply a change set
-   with that digest as `InferenceImage`. The same prediction path will record
-   the restored digest.
+Each forecast stores the runtime image as `inference_image`, plus the actual
+`model_digest` and `model_run` returned by inference. The packaged baseline
+uses the runtime image digest. Older forecasts retain their recorded image
+identity. Keep the per-run S3 artifacts for deployed models and rollback.
+`bin/prepare_candidate_image.py` is also available for offline rehearsals.
 
 ### Preview and deploy the public dashboard
 

@@ -3,31 +3,20 @@ import argparse
 import hashlib
 import json
 import shutil
-import tarfile
+import sys
 from pathlib import Path
 
-MODEL = "btcusdt_direction_15m_60m.joblib"
-METRICS = "btcusdt_direction_15m_60m.metrics.json"
 SOURCE = Path(__file__).resolve().parents[1] / "sagemaker"
-
-
-def read_member(archive, name, max_size):
-    matches = [member for member in archive if member.name.removeprefix("./") == name]
-    if len(matches) != 1 or not matches[0].isfile() or not 0 < matches[0].size <= max_size:
-        raise ValueError(f"Expected one regular file named {name} within the size limit")
-    with archive.extractfile(matches[0]) as stream:
-        return stream.read()
+sys.path.insert(0, str(SOURCE))
+from candidate_artifact import MODEL, METRICS, read_candidate
 
 
 def prepare(artifact, output):
-    with tarfile.open(artifact, "r:gz") as archive:
-        metrics = json.loads(read_member(archive, METRICS, 64 * 1024))
-        if not (metrics["test_rows"] > 0 and 0.55 <= metrics["accuracy"] <= 1):
-            raise ValueError("Candidate failed the chronological quality gate")
-        model = read_member(archive, MODEL, 32 * 1024 * 1024)
+    with artifact.open("rb") as stream:
+        model, metrics = read_candidate(stream)
 
     output.mkdir()
-    for filename in ("Dockerfile.lambda", "requirements.txt", "inference.py", "lambda_handler.py"):
+    for filename in ("Dockerfile.lambda", "requirements.txt", "inference.py", "lambda_handler.py", "candidate_artifact.py"):
         shutil.copyfile(SOURCE / filename, output / filename)
     (output / MODEL).write_bytes(model)
     return {

@@ -28,7 +28,7 @@ def test_private_prediction_saved_for_evaluation(monkeypatch):
     from unittest.mock import Mock
 
     candles = [{"open_time_utc": "2026-01-02T00:00:00Z", "close": 101}]
-    inferred = {"prediction": "FLAT", "probabilities": {"FLAT": 0.6},
+    inferred = {"prediction": "FLAT", "probabilities": {"FLAT": 0.6}, "model_digest": "sha256:456",
                 "close": 100, "bar_time_utc": "2026-01-01T23:45:00Z"}
     client = Mock()
     client.invoke.return_value = {"Payload": io.BytesIO(json.dumps(inferred).encode())}
@@ -46,6 +46,7 @@ def test_private_prediction_saved_for_evaluation(monkeypatch):
     assert item["bar_time_utc"] == inferred["bar_time_utc"]
     assert item["inference_function"] == "private-inference"
     assert item["inference_image"] == "candidate@sha256:123"
+    assert item["model_digest"] == "sha256:456"
 
 
 def test_function_error_cannot_be_recorded_as_prediction(monkeypatch):

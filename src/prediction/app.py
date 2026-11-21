@@ -155,6 +155,8 @@ def handler(event, context):
             "raw_s3_key": raw_key,
             "endpoint_name": (SAGEMAKER_ENDPOINT or None) if not INFERENCE_FUNCTION else None,
             "inference_function": INFERENCE_FUNCTION or None,
+            "model_digest": prediction.get("model_digest") or None,
+            "model_run": prediction.get("model_run"),
             "inference_image": (INFERENCE_IMAGE or None) if INFERENCE_FUNCTION else None,
         }
 

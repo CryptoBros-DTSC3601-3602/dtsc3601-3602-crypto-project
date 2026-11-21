@@ -66,6 +66,22 @@ Resources:
       FunctionName: !Sub '${ProjectName}-inference'
       PackageType: Image
       ImageUri: !Ref InferenceImage
+      Environment:
+        Variables:
+          DATA_BUCKET: !Ref DataBucketName
+          RETRAINING_TABLE: !If [TrainingConfigured, !Ref RetrainingTable, '']
+          INFERENCE_IMAGE: !Ref InferenceImage
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: dynamodb:GetItem
+              Resource: !If [TrainingConfigured, !GetAtt RetrainingTable.Arn, !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ProjectName}-unused']
+              Condition:
+                ForAllValues:StringEquals:
+                  dynamodb:LeadingKeys: [control]
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub 'arn:${AWS::Partition}:s3:::${DataBucketName}/retraining/artifacts/btc-*/output/model.tar.gz'
       MemorySize: 1024
       Timeout: 30
       Architectures: [x86_64]
@@ -181,6 +197,7 @@ Resources:
       Environment:
         Variables:
           RETRAINING_TABLE: !Ref RetrainingTable
+          INFERENCE_FUNCTION: !If [InferenceConfigured, !Ref InferenceFunction, '']
           PREDICTIONS_TABLE: !Ref PredictionsTable
           DATA_BUCKET: !Ref DataBucketName
       Policies:
@@ -189,7 +206,12 @@ Resources:
         - Statement:
             - Effect: Allow
               Action: s3:GetObject
-              Resource: !Sub 'arn:${AWS::Partition}:s3:::${DataBucketName}/retraining/*/metrics.json'
+              Resource:
+                - !Sub 'arn:${AWS::Partition}:s3:::${DataBucketName}/retraining/*/metrics.json'
+                - !Sub 'arn:${AWS::Partition}:s3:::${DataBucketName}/serverless/predictions/raw/binance/BTCUSDT/*'
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ProjectName}-inference'
 
   TrainingRole:
     Type: AWS::IAM::Role
@@ -317,7 +339,7 @@ Resources:
               Action: dynamodb:PutItem
               Resource: !GetAtt DashboardTable.Arn
             - Effect: Allow
-              Action: dynamodb:Scan
+              Action: [dynamodb:Scan, dynamodb:GetItem]
               Resource:
                 - !GetAtt PredictionsTable.Arn
                 - !If [TrainingConfigured, !GetAtt RetrainingTable.Arn, !Ref 'AWS::NoValue']
