@@ -2,12 +2,12 @@
 
 ## November 21, 2026 automatic model release
 
-Staged the automatic release implementation in Ohio as
+Applied the owner-approved automatic release implementation in Ohio as
 `samcli-deploy1795293440/b4214984-1442-42d1-89a2-2c8ca7112064`.
 The tested private inference runtime is
 `sha256:b3897ee350e0c9b25ec22adabbc79183c34ac6cd1de0df652d75e267a008b39e`.
-CloudFormation reported modifications to existing resources only. The reviewed
-change set requires owner approval to execute.
+CloudFormation reached `UPDATE_COMPLETE`. Verified the live workflow's
+promotion, verification and recovery states and all four enabled schedules.
 
 All 19 focused tests passed. SAM lint and build passed. AWS Step Functions
 validated the substituted workflow definition with zero diagnostics.
@@ -16,8 +16,12 @@ preview and selection of the real local training artifact, digest rejection
 and restoration. Transaction tests covered a packaged baseline and a previously
 promoted model, including repeated calls during deployment and rollback.
 
-After applying the change set, verify the active workflow and private baseline
-invocation. On the first eligible passing training run, inspect `Promote` and
+Replayed archived candles from forecast `20261121T200000Z` through the live
+private Lambda. It returned `FLAT`, the baseline model identifier, and the
+expected runtime digest. The refreshed public dashboard showed 9 correct of
+21 at 3:48 p.m. Eastern, and the eligibility execution
+`auto-release-deployment-eb91777` succeeded with `train=false`.
+On the first eligible passing training run, inspect `Promote` and
 `VerifyServing`, the run's `deployed` history status, and the model digest on
 the next hourly forecast and dashboard snapshot. Matching model digests confirm
 the live switch. The workflow now handles the release step in the earlier
