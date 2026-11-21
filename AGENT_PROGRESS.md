@@ -1,5 +1,21 @@
 # Agent progress journal
 
+## November 21, 2026 production trainer release
+
+Applied the approved `trainer-gap-handling-556a4123` change set in Ohio.
+CloudFormation reached `UPDATE_COMPLETE`. The stack parameter and active
+Step Functions definition both reference the training image digest
+`sha256:556a4123a57ef19838d7d06bf521f7a22a79177ac3866e4e834d4930a3c8d492`.
+The job uses one `ml.m5.large` with a 1,800-second training limit.
+The hourly prediction, evaluation and dashboard rules and the 03:45 UTC
+daily eligibility rule were enabled.
+
+The post-deployment execution `trainer-release-check-556a4123` succeeded
+with `train=false`. The public snapshot at 2:25 p.m. Eastern showed 9
+correct of 20 scored forecasts and zero training runs. All 13 focused tests
+passed. The next live milestone is an eligible training run. Check the
+November 24 evening window as described in the presentation checks below.
+
 ## November 21, 2026 training rehearsal
 
 Binance.US returned 35,004 of 35,040 candles requested over the last year.

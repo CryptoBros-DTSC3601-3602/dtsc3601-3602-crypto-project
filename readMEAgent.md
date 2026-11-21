@@ -59,4 +59,5 @@ The owner approved recurring eligible jobs on November 20, 2026. The live stack
 sets `RetrainingScheduleState=ENABLED` and checks daily at 03:45 UTC. Preserve
 this parameter on subsequent releases. The seven-day cooldown starts when a job
 is admitted. See the latest progress journal entry for the December 1 verification
-plan and current status.
+plan and current status. The approved gap-aware training image was deployed and
+verified in the live workflow on November 21, 2026.
