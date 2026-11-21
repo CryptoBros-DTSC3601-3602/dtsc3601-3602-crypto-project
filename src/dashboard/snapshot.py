@@ -61,10 +61,9 @@ def build_snapshot(newest, history, image):
     }
 
 
-def handler(event, context):
-    dynamo = boto3.resource("dynamodb")
+def read_snapshot(dynamo, predictions_table, history_table, image):
     completed = scan(
-        dynamo.Table(os.environ["PREDICTIONS_TABLE"]),
+        dynamo.Table(predictions_table),
         "prediction_id, prediction, created_at, bar_time_utc, #close, probabilities, inference_image, correct",
         "#status = :completed", {"#status": "status", "#close": "close"}, {":completed": "completed"},
     )
@@ -84,13 +83,19 @@ def handler(event, context):
             else:
                 heapq.heappushpop(evaluated, entry)
 
-    history_table = os.getenv("RETRAINING_TABLE")
     history = scan(dynamo.Table(history_table), "id, started_at, #status, #metrics",
                    "attribute_exists(started_at)", {"#status": "status", "#metrics": "metrics"},
                    {}) if history_table else []
-    snapshot = build_snapshot(latest, history, os.getenv("INFERENCE_IMAGE"))
+    snapshot = build_snapshot(latest, history, image)
     snapshot["accuracy"] = {"outcomes": [int(correct) for _, correct in sorted(evaluated)]}
     snapshot["training_configured"] = bool(history_table)
+    return snapshot
+
+
+def handler(event, context):
+    dynamo = boto3.resource("dynamodb")
+    snapshot = read_snapshot(dynamo, os.environ["PREDICTIONS_TABLE"],
+                             os.getenv("RETRAINING_TABLE"), os.getenv("INFERENCE_IMAGE"))
     dynamo.Table(os.environ["DASHBOARD_TABLE"]).put_item(
         Item={"id": "dashboard", "payload": json.dumps(snapshot)}
     )

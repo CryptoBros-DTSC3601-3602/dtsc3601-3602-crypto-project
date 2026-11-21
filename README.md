@@ -253,6 +253,13 @@ Run `python bin/preview_dashboard.py` from the repository root and open
 `http://localhost:8000` on the same machine. This preview uses labeled sample
 data and requires only Python 3.
 
+For a local dashboard connected to AWS, run `python bin/preview_dashboard.py --aws`
+with boto3 installed and the project CLI profile available. Open
+`http://127.0.0.1:8000`. The local server checks the AWS identity and reads the
+project tables to assemble the same sanitized snapshot as the hourly publisher.
+Credentials stay on the server. Empty forecast and accuracy fields reflect the
+current table contents. This mode works with `DashboardEnabled=false`.
+
 For live data, use AWS CLI credentials for the existing project account,
 Docker for image builds, and AWS SAM CLI. Push the inference image and, for live
 training history, the training image to private ECR in `us-east-2` using the

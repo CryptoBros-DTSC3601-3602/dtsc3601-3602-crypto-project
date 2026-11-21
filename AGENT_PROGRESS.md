@@ -1,5 +1,37 @@
 # Agent progress journal
 
+## November 20, 2026 live backend
+
+Executed the approved backend change set. The stack reached `UPDATE_COMPLETE`
+and both hourly prediction and evaluation rules are enabled. Private Lambda
+inference is active on the staged digest. Public hosting and retraining are
+disabled. Recurring usage includes Lambda, S3, DynamoDB and logs.
+
+The first live invocation stored 120 candles in S3 and wrote completed forecast
+`20261120T234734Z` to DynamoDB. The local dashboard and Edge displayed
+`FLAT` with the matching model digest. Open `http://127.0.0.1:8000` on the
+project PC. To restart the live view, run `python bin/preview_dashboard.py --aws`.
+
+Scheduled forecasts arrived at 7 and 8 p.m. Eastern. At 8:15 p.m. the
+evaluation Lambda scored the first manual forecast correct and the 7 p.m.
+scheduled forecast incorrect. The dashboard returned outcomes `[1, 0]`,
+matching the DynamoDB records (one correct of two).
+
+## November 20, 2026 backend staging
+
+The tested private inference image was pushed to the existing ECR repository
+with digest `sha256:92ec74ad673120b4a6922a4235e6970f05a897f4e6f9f57a0d3727c4dc0470fd`.
+SAM uploaded artifacts under the shared bucket's deployment prefix. These
+artifacts and the ECR image can incur storage charges. The backend-only
+change set `samcli-deploy1795218144` was staged for review with
+`DashboardEnabled=false` and empty training and SageMaker endpoint parameters.
+When staging with this SAM CLI, pass `--image-repositories "InferenceFunction=$repo"`
+where `$repo` is the full existing ECR repository URI.
+
+The local dashboard now supports `python bin/preview_dashboard.py --aws`.
+Verified the live DynamoDB read, local HTTP routes, and rendered empty state
+in Edge. All 12 focused tests, SAM lint, and SAM build passed.
+
 ## November 19, 2026 Windows checkpoint
 
 Reviewed the implementation at `a862718` on `full-serverless`. The verified

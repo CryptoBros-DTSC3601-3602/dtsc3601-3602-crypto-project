@@ -1,5 +1,7 @@
-"""Preview the dashboard locally with labeled fixture data."""
+"""Serve the dashboard locally with sample data or read-only AWS data."""
+import argparse
 import json
+import sys
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -29,7 +31,13 @@ FILES = {"/": ("index.html", "text/html"), "/dashboard.css": ("dashboard.css", "
 class Preview(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/dashboard":
-            content_type, body = "application/json", json.dumps(FIXTURE).encode()
+            try:
+                snapshot = self.server.load_snapshot()
+            except Exception as error:
+                self.log_error("AWS snapshot read failed (%s)", type(error).__name__)
+                self.send_error(503, "AWS dashboard data unavailable")
+                return
+            content_type, body = "application/json", json.dumps(snapshot).encode()
         elif self.path in FILES:
             filename, content_type = FILES[self.path]
             body = (STATIC / filename).read_bytes()
@@ -43,5 +51,39 @@ class Preview(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+def aws_snapshot_reader():
+    import boto3
+    sys.path.insert(0, str(STATIC.parents[2]))
+    from src.dashboard.snapshot import read_snapshot
+
+    session = boto3.Session(profile_name="dtsc3601-crypto", region_name="us-east-2")
+    identity = session.client("sts").get_caller_identity()
+    if identity["Arn"] != "arn:aws:iam::879022683465:user/AashutoshPanchal":
+        raise RuntimeError("Unexpected AWS identity for the project dashboard")
+    cloudformation = session.client("cloudformation")
+    stack_name = "dtsc3601-crypto-serverless"
+
+    def load():
+        stack = cloudformation.describe_stacks(StackName=stack_name)["Stacks"][0]
+        outputs = {v["OutputKey"]: v["OutputValue"] for v in stack["Outputs"]}
+        params = {v["ParameterKey"]: v["ParameterValue"] for v in stack["Parameters"]}
+        history = None
+        if params.get("TrainingImage"):
+            history = cloudformation.describe_stack_resource(
+                StackName=stack_name, LogicalResourceId="RetrainingTable"
+            )["StackResourceDetail"]["PhysicalResourceId"]
+        return read_snapshot(session.resource("dynamodb"), outputs["PredictionsTableName"],
+                             history, params.get("InferenceImage"))
+
+    return load
+
+
 if __name__ == "__main__":
-    ThreadingHTTPServer(("0.0.0.0", 8000), Preview).serve_forever()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--aws", action="store_true", help="read live AWS project data")
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args()
+    reader = aws_snapshot_reader() if args.aws else lambda: FIXTURE
+    with ThreadingHTTPServer(("127.0.0.1", args.port), Preview) as server:
+        server.load_snapshot = reader
+        server.serve_forever()
