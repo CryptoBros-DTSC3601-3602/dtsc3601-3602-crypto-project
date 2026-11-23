@@ -19,6 +19,7 @@ model = model_fn(Path(__file__).parent)
 
 @lru_cache(maxsize=2)
 def candidate(run, expected_digest):
+    """Load a trusted run's S3 model and return the fitted estimator and SHA-256 digest. Reject invalid run IDs, oversized archives or digest mismatches."""
     if not re.fullmatch(r"btc-[0-9a-f]{32}", run):
         raise ValueError("Invalid training run")
     obj = boto3.client("s3").get_object(Bucket=os.environ["DATA_BUCKET"],
@@ -34,6 +35,7 @@ def candidate(run, expected_digest):
 
 
 def handler(event, context):
+    """Load the selected model and return its identity with a forecast for the supplied candles."""
     selected = {}
     if event.get("preview_run"):
         selected = {"run": event["preview_run"]}

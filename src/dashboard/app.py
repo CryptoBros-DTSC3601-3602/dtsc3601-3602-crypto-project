@@ -15,6 +15,7 @@ FILES = {
 
 
 def response(status, body, content_type, cache="no-store"):
+    """Build an API Gateway response with the given HTTP status, content type, cache policy and security headers."""
     return {
         "statusCode": status,
         "headers": {
@@ -28,6 +29,7 @@ def response(status, body, content_type, cache="no-store"):
 
 
 def handler(event, context):
+    """Route a browser GET to a static asset or the published DynamoDB snapshot. Return 404 for unknown paths."""
     path = event.get("rawPath", "/")
     if path in FILES:
         filename, content_type = FILES[path]

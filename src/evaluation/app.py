@@ -18,6 +18,7 @@ table = boto3.resource("dynamodb").Table(TABLE_NAME)
 
 
 def direction(return_value):
+    """Map a realized return to a class; both threshold endpoints count as FLAT."""
     if return_value > FLAT_THRESHOLD:
         return "UP"
     if return_value < -FLAT_THRESHOLD:
@@ -26,6 +27,7 @@ def direction(return_value):
 
 
 def fetch_candle_at(timestamp):
+    """Fetch the close for the target candle as a Decimal. Return None while the market candle is unavailable or open."""
     target_ms = int(timestamp.timestamp() * 1000)
     query = urlencode({
         "symbol": "BTCUSDT",
@@ -41,6 +43,7 @@ def fetch_candle_at(timestamp):
 
 
 def pending_items():
+    """Yield completed, unscored records across every DynamoDB scan page."""
     options = {
         "FilterExpression": "#status = :completed AND attribute_not_exists(evaluated_at)",
         "ExpressionAttributeNames": {"#status": "status"},
@@ -55,6 +58,7 @@ def pending_items():
 
 
 def handler(event, context):
+    """Score mature forecasts against the target candle and skip previously evaluated rows."""
     evaluated = 0
     for item in pending_items():
         bar_time = datetime.fromisoformat(item["bar_time_utc"].replace("Z", "+00:00"))

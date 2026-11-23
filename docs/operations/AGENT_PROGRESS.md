@@ -253,7 +253,7 @@ recurring activity. Keep the endpoint absent and the retraining rule disabled.
 
 1. Use the locally smoke-tested `crypto-inference` image for staging. If it
    needs rebuilding, use these Windows commands and the sample candle request
-   in the [README](README.md). Keep the optional `crypto-training` image for
+   in the [deployment guide](project-guide.md). Keep the optional `crypto-training` image for
    separate training review.
 
    ```powershell

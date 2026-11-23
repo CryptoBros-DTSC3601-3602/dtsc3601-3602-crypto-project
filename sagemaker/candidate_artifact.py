@@ -7,6 +7,7 @@ METRICS = "btcusdt_direction_15m_60m.metrics.json"
 
 
 def read_member(archive, name, max_size):
+    """Read exactly one regular archive member by name, enforcing the caller's byte limit before extraction."""
     matches = [m for m in archive if m.name.removeprefix("./") == name]
     if len(matches) != 1 or not matches[0].isfile() or not 0 < matches[0].size <= max_size:
         raise ValueError(f"Expected one regular file named {name} within the size limit")
@@ -15,6 +16,7 @@ def read_member(archive, name, max_size):
 
 
 def read_candidate(stream):
+    """Read model bytes and metrics from a trusted training archive. Reject candidates that fail the chronological accuracy or sample-size gate."""
     with tarfile.open(fileobj=stream, mode="r:gz") as archive:
         metrics = json.loads(read_member(archive, METRICS, 64 * 1024))
         if not (metrics["test_rows"] > 0 and 0.55 <= metrics["accuracy"] <= 1):

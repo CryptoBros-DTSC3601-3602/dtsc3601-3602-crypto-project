@@ -31,7 +31,9 @@ FILES = {"/": ("index.html", "text/html"), "/dashboard.css": ("dashboard.css", "
 
 
 class Preview(BaseHTTPRequestHandler):
+    """Serve dashboard assets and a read-only JSON snapshot on localhost."""
     def do_GET(self):
+        """Map the request path to a static asset or the configured snapshot reader."""
         if self.path == "/api/dashboard":
             try:
                 snapshot = self.server.load_snapshot()
@@ -54,6 +56,7 @@ class Preview(BaseHTTPRequestHandler):
 
 
 def aws_snapshot_reader():
+    """Return a snapshot loader bound to the project AWS profile after checking its account and user identity."""
     import boto3
     sys.path.insert(0, str(STATIC.parents[2]))
     from src.dashboard.snapshot import read_snapshot
@@ -66,6 +69,7 @@ def aws_snapshot_reader():
     stack_name = "dtsc3601-crypto-serverless"
 
     def load():
+        """Resolve the live stack parameters and read a fresh snapshot each time the preview requests data."""
         stack = cloudformation.describe_stacks(StackName=stack_name)["Stacks"][0]
         outputs = {v["OutputKey"]: v["OutputValue"] for v in stack["Outputs"]}
         params = {v["ParameterKey"]: v["ParameterValue"] for v in stack["Parameters"]}

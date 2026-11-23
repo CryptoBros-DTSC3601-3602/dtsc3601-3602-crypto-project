@@ -29,18 +29,22 @@ predictions = dynamodb.Table(TABLE_NAME)
 
 
 def utc_now():
+    """Return the current time as a timezone-aware UTC datetime."""
     return datetime.now(timezone.utc)
 
 
 def iso_utc(value):
+    """Format an aware datetime in UTC with a trailing Z for storage."""
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def ms_to_iso(timestamp_ms):
+    """Convert an exchange timestamp in Unix milliseconds to an ISO UTC timestamp."""
     return iso_utc(datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc))
 
 
 def fetch_candles():
+    """Request recent BTCUSDT bars and return up to 120 completed candles with numeric prices and UTC timestamps."""
     params = urlencode({
         "symbol": SYMBOL,
         "interval": INTERVAL,
@@ -74,10 +78,12 @@ def fetch_candles():
 
 
 def decimal(value):
+    """Convert a numeric value through its string representation for DynamoDB decimal storage."""
     return Decimal(str(value))
 
 
 def invoke_prediction(candles):
+    """Send candles to the configured inference service and return the forecast record. Mark the record pending when no service is configured."""
     if INFERENCE_FUNCTION:
         response = boto3.client("lambda", region_name=REGION).invoke(
             FunctionName=INFERENCE_FUNCTION,
@@ -107,6 +113,7 @@ def invoke_prediction(candles):
 
 
 def store_raw_data(now, candles):
+    """Write the input candle window to a timestamped S3 object and return its key for forecast replay."""
     key = (
         f"serverless/predictions/raw/binance/{SYMBOL}/"
         f"{now.strftime('%Y/%m/%d/%H-%M-%S')}.json"
@@ -128,6 +135,7 @@ def store_raw_data(now, candles):
 
 
 def handler(event, context):
+    """Archive the completed candle window and record its one-hour forecast and model identity."""
     now = utc_now()
 
     try:

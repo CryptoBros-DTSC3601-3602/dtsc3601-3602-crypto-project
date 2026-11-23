@@ -1,3 +1,4 @@
+"""Live connectivity check that writes python-test.txt to the configured project bucket."""
 import boto3
 
 session = boto3.Session(profile_name="dtsc3601-crypto")

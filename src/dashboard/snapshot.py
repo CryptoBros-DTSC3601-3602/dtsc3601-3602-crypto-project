@@ -9,6 +9,7 @@ import boto3
 
 
 def scan(table, projection, filter_expression, names, values):
+    """Yield matching DynamoDB items across all scan pages, including after an empty filtered page."""
     options = {
         "ProjectionExpression": projection,
         "FilterExpression": filter_expression,
@@ -25,6 +26,7 @@ def scan(table, projection, filter_expression, names, values):
 
 
 def model_digest(image):
+    """Extract the SHA-256 digest from an immutable image URI, or return None when it has no digest."""
     if not image:
         return None
     _, separator, digest = image.partition("@sha256:")
@@ -32,6 +34,7 @@ def model_digest(image):
 
 
 def build_snapshot(newest, history, image):
+    """Convert the latest forecast and up to ten recent training runs into public, JSON-compatible fields."""
     if newest:
         forecast = {key: newest.get(key) for key in ("prediction", "created_at", "bar_time_utc")}
         forecast["close"] = float(newest["close"]) if newest.get("close") is not None else None
@@ -68,6 +71,7 @@ def build_snapshot(newest, history, image):
 
 
 def read_snapshot(dynamo, predictions_table, history_table, image):
+    """Summarize private forecast and release records for the public read-only dashboard."""
     completed = scan(
         dynamo.Table(predictions_table),
         "prediction_id, prediction, created_at, bar_time_utc, #close, probabilities, inference_image, model_digest, correct",
@@ -110,6 +114,7 @@ def read_snapshot(dynamo, predictions_table, history_table, image):
 
 
 def handler(event, context):
+    """Build the current public snapshot and replace the dashboard table's cached payload."""
     dynamo = boto3.resource("dynamodb")
     snapshot = read_snapshot(dynamo, os.environ["PREDICTIONS_TABLE"],
                              os.getenv("RETRAINING_TABLE"), os.getenv("INFERENCE_IMAGE"))

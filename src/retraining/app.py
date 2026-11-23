@@ -17,6 +17,7 @@ COOLDOWN = 7 * 86400
 
 
 def evaluated_predictions(table):
+    """Yield prediction IDs and boolean outcomes from a consistent, paginated table scan."""
     options = dict(
         ProjectionExpression="prediction_id, correct",
         FilterExpression="attribute_exists(evaluated_at) AND attribute_type(correct, :bool)",
@@ -32,6 +33,7 @@ def evaluated_predictions(table):
 
 
 def rolling_window(rows):
+    """Return the newest prediction ID and count correct once a full window exists."""
     # Prediction IDs use UTC YYYYMMDDTHHMMSSZ, including historical records.
     newest = heapq.nlargest(WINDOW, rows, key=lambda row: row["prediction_id"])
     if len(newest) < WINDOW:
@@ -40,6 +42,7 @@ def rolling_window(rows):
 
 
 def reserve(db, table, run, window, now):
+    """Claim one eligible window and set its cooldown in the same transaction."""
     latest, score = window
     try:
         db.transact_write_items(TransactItems=[
@@ -68,6 +71,7 @@ def reserve(db, table, run, window, now):
 
 
 def check_serving(run_record, preview=False):
+    """Replay archived candles and verify the selected model produced a valid forecast."""
     dynamo = boto3.resource("dynamodb")
     forecast = dynamo.Table(os.environ["PREDICTIONS_TABLE"]).get_item(
         Key={"prediction_id": run_record["window_end"]}, ConsistentRead=True)["Item"]
@@ -93,6 +97,7 @@ def check_serving(run_record, preview=False):
 
 
 def switch_model(table, record, previous, target, rollback=False):
+    """Atomically update the model selected for inference and its release history."""
     # Change the serving pointer and release history together, including on retry.
     encode = TypeSerializer().serialize
     expected, status = ("verifying", "rolled_back") if rollback else ("validated", "verifying")
@@ -118,6 +123,7 @@ def switch_model(table, record, previous, target, rollback=False):
 
 
 def release(table, run, action):
+    """Apply a promotion, verification or recovery command to a recorded run. Check its state before switching or restoring the serving model."""
     record = table.get_item(Key={"id": run}, ConsistentRead=True)["Item"]
     status = record["status"]
     if action == "promote":
@@ -151,6 +157,7 @@ def release(table, run, action):
 
 
 def handler(event, context):
+    """Handle eligibility, training status and release commands from Step Functions."""
     run = "btc-" + hashlib.sha256(event["execution"].encode()).hexdigest()[:32]
     dynamo = boto3.resource("dynamodb")
     history = dynamo.Table(os.environ["RETRAINING_TABLE"])

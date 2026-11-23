@@ -7,6 +7,7 @@ const date = value => value ? new Intl.DateTimeFormat("en", {
 const digest = value => value ? value.slice(0, 19) : "—";
 let chartData = [];
 
+/** Display the next hourly run and refresh the label when that hour begins. */
 function showNextPrediction() {
   const now = new Date();
   const next = new Date(now);
@@ -18,6 +19,7 @@ function showNextPrediction() {
 }
 showNextPrediction();
 
+/** Draw cumulative accuracy across the visible window, scaling the canvas for the display. */
 function drawChart() {
   if (!chartData.length) return;
   const canvas = element("accuracy-chart");
@@ -54,6 +56,7 @@ function drawChart() {
   ctx.fill();
 }
 
+/** Populate forecast, score and model-history panels from one public snapshot. */
 function render(data) {
   const choices = element("importance-model");
   const prior = choices.value;
@@ -61,6 +64,7 @@ function render(data) {
     ...data.training_runs.map(run => [run.id, run.importance])]);
   choices.replaceChildren(...Array.from(reports.keys(), id => new Option(id, id)));
   if (reports.has(prior)) choices.value = prior;
+  /** Rank the selected model's inputs by their mean effect on holdout accuracy. */
   function renderImportance() {
     const report = reports.get(choices.value);
     const scores = Object.entries(report?.scores || {}).sort((a, b) => b[1] - a[1]);
@@ -141,6 +145,7 @@ function render(data) {
 }
 
 let lastSnapshot;
+/** Fetch a fresh snapshot and retain the last successful display if the request fails. */
 async function refresh() {
   try {
     const response = await fetch("/api/dashboard");

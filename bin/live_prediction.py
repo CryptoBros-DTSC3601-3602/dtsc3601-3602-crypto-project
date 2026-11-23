@@ -13,9 +13,9 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from data_fetcher import get_binance_data
-from modeling import predict_latest
-from s3_to_dataframe import prepare_dataframe
+from cryptobros.data_fetcher import get_binance_data
+from cryptobros.modeling import predict_latest
+from cryptobros.s3_to_dataframe import prepare_dataframe
 
 
 MODEL_PATH = PROJECT_ROOT / "models" / "btcusdt_direction_15m_60m.joblib"

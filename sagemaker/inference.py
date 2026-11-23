@@ -26,11 +26,13 @@ FEATURE_COLUMNS = [
 
 
 def model_fn(model_dir):
+    """Load the packaged joblib estimator from the supplied model directory."""
     package = joblib.load(f"{model_dir}/btcusdt_direction_15m_60m.joblib")
     return package["model"]
 
 
 def input_fn(request_body, request_content_type):
+    """Decode an application/json request containing a candles array into a DataFrame."""
     if request_content_type != "application/json":
         raise ValueError(f"Unsupported content type: {request_content_type}")
     payload = json.loads(request_body)
@@ -38,6 +40,7 @@ def input_fn(request_body, request_content_type):
 
 
 def create_latest_features(candles):
+    """Build trailing indicators from the candle window and return the newest usable row. Raise ValueError if no complete feature row exists."""
     frame = candles.copy()
     frame["open_time_utc"] = pd.to_datetime(frame["open_time_utc"], utc=True)
     frame = frame.sort_values("open_time_utc").drop_duplicates("open_time_utc")
@@ -99,6 +102,7 @@ def create_latest_features(candles):
 
 
 def predict_fn(latest_candles, model):
+    """Evaluate the newest feature row and return the direction, class probabilities, anchor close and timestamp."""
     row = create_latest_features(latest_candles)
     probabilities = model.predict_proba(row[FEATURE_COLUMNS])[0]
     predicted_class = int(model.predict(row[FEATURE_COLUMNS])[0])
@@ -114,6 +118,7 @@ def predict_fn(latest_candles, model):
 
 
 def output_fn(prediction, accept):
+    """Serialize a prediction as JSON and return the response body and MIME type."""
     if accept != "application/json":
         raise ValueError(f"Unsupported accept type: {accept}")
     return json.dumps(prediction), "application/json"

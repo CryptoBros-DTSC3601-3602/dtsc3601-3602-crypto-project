@@ -1,3 +1,4 @@
+"""Request five public Binance.US candles to check local network connectivity."""
 import requests
 
 url = "https://api.binance.us/api/v3/klines"

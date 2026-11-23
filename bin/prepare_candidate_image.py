@@ -12,6 +12,7 @@ from candidate_artifact import MODEL, METRICS, read_candidate
 
 
 def prepare(artifact, output):
+    """Create a new serving-image directory from a trusted candidate archive. Return the model hash and holdout metrics; an existing output directory raises FileExistsError."""
     with artifact.open("rb") as stream:
         model, metrics = read_candidate(stream)
 
@@ -27,6 +28,7 @@ def prepare(artifact, output):
 
 
 def main():
+    """Parse archive and destination paths, prepare the build context and print its release metadata as JSON."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("artifact", type=Path, help="model.tar.gz from a validated training run")
     parser.add_argument("output", type=Path, help="New directory for the candidate image context")

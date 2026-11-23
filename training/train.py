@@ -6,12 +6,13 @@ from pathlib import Path
 import boto3
 import pandas as pd
 
-from feature_engineering import create_features
-from historical_backfill import convert_to_csv, fetch_historical_data, TOTAL_CANDLES, INTERVAL_MS
-from modeling import save_model, train_direction_model
+from cryptobros.feature_engineering import create_features
+from cryptobros.historical_backfill import convert_to_csv, fetch_historical_data, TOTAL_CANDLES, INTERVAL_MS
+from cryptobros.modeling import save_model, train_direction_model
 
 
 def training_features(candles):
+    """Build labeled rows independently inside consecutive 15-minute candle segments."""
     times = candles["open_time"]
     if not times.is_monotonic_increasing or not times.is_unique or (times % INTERVAL_MS != 0).any():
         raise ValueError("Training candles must be ordered, unique and on 15-minute boundaries")
@@ -24,12 +25,14 @@ def training_features(candles):
 
 
 def validate(candles):
+    """Fit on earlier candles and return the estimator and chronological holdout metrics."""
     features = training_features(candles)
     # Purge four rows so training labels cannot use prices in the holdout.
     return train_direction_model(features, gap_bars=4, explain=True)
 
 
 def main():
+    """Download the annual candle window, train and write run-specific inputs and metrics to S3. Emit a model artifact only if validation passes."""
     bucket = os.environ["DATA_BUCKET"]
     prefix = "retraining/" + os.environ["RUN_ID"]
     rows = fetch_historical_data()
@@ -45,6 +48,7 @@ def main():
 
 
 def save_candidate(model, metrics, directory):
+    """Write the serving artifact only when the holdout meets the release threshold."""
     if not (metrics["test_rows"] > 0 and 0.55 <= metrics["accuracy"] <= 1):
         raise ValueError("Chronological holdout accuracy below candidate quality gate")
     save_model(model, metrics, directory / "btcusdt_direction_15m_60m.joblib")

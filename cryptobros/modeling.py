@@ -11,7 +11,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
-from feature_engineering import FEATURE_COLUMNS, latest_feature_row
+from cryptobros.feature_engineering import FEATURE_COLUMNS, latest_feature_row
 
 
 def explain_model(model, test):
@@ -41,6 +41,7 @@ def train_direction_model(
         test_fraction: Fraction of the most recent rows reserved for testing.
         random_state: Seed used by the classifier for reproducibility.
         gap_bars: Rows excluded immediately before the holdout to purge overlapping labels.
+        explain: Include permutation importance measured on the chronological holdout.
 
     Returns:
         The fitted classifier and a dictionary of evaluation metrics.
