@@ -8,15 +8,27 @@ from pathlib import Path
 import joblib
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.inspection import permutation_importance
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 from feature_engineering import FEATURE_COLUMNS, latest_feature_row
+
+
+def explain_model(model, test):
+    """Mean change in holdout accuracy when one feature is shuffled."""
+    result = permutation_importance(model, test[FEATURE_COLUMNS], test["target"],
+                                    scoring="accuracy", n_repeats=5, random_state=42, n_jobs=1)
+    return {"rows": len(test), "start": test["open_time_utc"].iloc[0].isoformat(),
+            "end": test["open_time_utc"].iloc[-1].isoformat(),
+            "scores": dict(zip(FEATURE_COLUMNS, result.importances_mean.tolist()))}
 
 
 def train_direction_model(
     feature_frame: pd.DataFrame,
     test_fraction: float = 0.2,
     random_state: int = 42,
+    gap_bars: int = 0,
+    explain: bool = False,
 ) -> tuple[HistGradientBoostingClassifier, dict]:
     """Train and evaluate a classifier using a chronological holdout.
 
@@ -28,6 +40,7 @@ def train_direction_model(
         feature_frame: Model-ready rows containing feature columns and target.
         test_fraction: Fraction of the most recent rows reserved for testing.
         random_state: Seed used by the classifier for reproducibility.
+        gap_bars: Rows excluded immediately before the holdout to purge overlapping labels.
 
     Returns:
         The fitted classifier and a dictionary of evaluation metrics.
@@ -35,15 +48,17 @@ def train_direction_model(
     if not 0 < test_fraction < 1:
         raise ValueError("test_fraction must be between 0 and 1")
     split = int(len(feature_frame) * (1 - test_fraction))
-    if split <= 0 or split >= len(feature_frame):
+    if gap_bars < 0 or split <= gap_bars or split >= len(feature_frame):
         raise ValueError("Feature frame is too small for the requested split.")
 
-    train = feature_frame.iloc[:split]
+    train = feature_frame.iloc[:split - gap_bars]
     test = feature_frame.iloc[split:]
     model = _make_model(random_state)
     model.fit(train[FEATURE_COLUMNS], train["target"])
     predictions = model.predict(test[FEATURE_COLUMNS])
     metrics = _metrics(test["target"], predictions, len(train), len(test))
+    if explain:
+        metrics["importance"] = explain_model(model, test)
     return model, metrics
 
 

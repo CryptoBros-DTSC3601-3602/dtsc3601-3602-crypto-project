@@ -1,0 +1,5 @@
+FROM amazon/aws-lambda-python:3.12
+COPY requirements.txt /tmp/model-requirements.txt
+RUN pip install --no-cache-dir -r /tmp/model-requirements.txt
+COPY inference.py lambda_handler.py candidate_artifact.py btcusdt_direction_15m_60m.joblib ${LAMBDA_TASK_ROOT}/
+CMD ["lambda_handler.handler"]

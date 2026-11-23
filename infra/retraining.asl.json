@@ -1,0 +1,63 @@
+{
+  "StartAt": "CheckWindow",
+  "TimeoutSeconds": 7200,
+  "States": {
+    "CheckWindow": {
+      "Type": "Task", "Resource": "${FunctionArn}",
+      "Parameters": {"execution.$": "$$.Execution.Id"}, "Next": "Eligible"
+    },
+    "Eligible": {
+      "Type": "Choice", "Choices": [{"Variable": "$.train", "BooleanEquals": true, "Next": "TrainCandidate"}],
+      "Default": "Done"
+    },
+    "TrainCandidate": {
+      "Type": "Task", "Resource": "arn:aws:states:::sagemaker:createTrainingJob.sync",
+      "Parameters": {
+        "TrainingJobName.$": "$.run",
+        "RoleArn": "${TrainingRoleArn}",
+        "AlgorithmSpecification": {"TrainingImage": "${TrainingImage}", "TrainingInputMode": "File"},
+        "ResourceConfig": {"InstanceType": "ml.m5.large", "InstanceCount": 1, "VolumeSizeInGB": 5},
+        "StoppingCondition": {"MaxRuntimeInSeconds": 1800},
+        "OutputDataConfig": {"S3OutputPath": "s3://${Bucket}/retraining/artifacts"},
+        "Environment": {"DATA_BUCKET": "${Bucket}", "RUN_ID.$": "$.run"}
+      },
+      "ResultPath": "$.job",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure"}],
+      "Next": "RecordCandidate"
+    },
+    "RecordCandidate": {
+      "Type": "Task", "Resource": "${FunctionArn}",
+      "Parameters": {"execution.$": "$$.Execution.Id", "status": "validated", "artifact.$": "States.Format('s3://${Bucket}/retraining/artifacts/{}/output/model.tar.gz', $.run)"},
+      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "MaxAttempts": 3}],
+      "Next": "ReleaseConfigured"
+    },
+    "ReleaseConfigured": {
+      "Type": "Choice", "Choices": [{"Variable": "$.auto_release", "BooleanEquals": true, "Next": "Promote"}],
+      "Default": "Done"
+    },
+    "Promote": {
+      "Type": "Task", "Resource": "${FunctionArn}",
+      "Parameters": {"execution.$": "$$.Execution.Id", "release_action": "promote"},
+      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "MaxAttempts": 2}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "RecoverRelease"}], "Next": "VerifyServing"
+    },
+    "VerifyServing": {
+      "Type": "Task", "Resource": "${FunctionArn}",
+      "Parameters": {"execution.$": "$$.Execution.Id", "release_action": "verify"},
+      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "MaxAttempts": 2}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "RecoverRelease"}], "Next": "Done"
+    },
+    "RecoverRelease": {
+      "Type": "Task", "Resource": "${FunctionArn}",
+      "Parameters": {"execution.$": "$$.Execution.Id", "release_action": "recover"},
+      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "MaxAttempts": 3}], "Next": "ReleaseFailed"
+    },
+    "ReleaseFailed": {"Type": "Fail", "Error": "CandidateReleaseFailed"},
+    "RecordFailure": {
+      "Type": "Task", "Resource": "${FunctionArn}",
+      "Parameters": {"execution.$": "$$.Execution.Id", "status": "failed"},
+      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "MaxAttempts": 3}], "Next": "TrainingFailed"
+    },
+    "TrainingFailed": {"Type": "Fail"}, "Done": {"Type": "Succeed"}
+  }
+}
